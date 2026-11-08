@@ -1465,7 +1465,7 @@ const Dart = (() => {
     const msg = S.dataMsg ? h('p', { class: 'help', role: 'status' }, S.dataMsg) : null;
     return h('div', { class: 'card' },
       h('h3', null, 'Daten übertragen'),
-      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 3)'),
+      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 4)'),
       h('button', {
         class: 'btn', type: 'button',
         onclick: async () => {
@@ -1495,7 +1495,7 @@ const Dart = (() => {
   }
   function buildPlayers() {
     const out = [h('h2', { class: 'h' }, 'Spieler'), addPlayerForm('new-player-2', false)];
-    if (!S.players.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine Spieler. Leg oben den ersten an.' : 'Spieler werden geladen …'), dataCard()); return out; }
+    if (!S.players.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine Spieler. Leg oben den ersten an.' : 'Spieler werden geladen …'), syncCard(), dataCard()); return out; }
     for (const p of S.players) {
       const s = playerStats(p.id);
       let head;
@@ -1525,6 +1525,7 @@ const Dart = (() => {
           kv('Überworfen/Spiel', s.x01 ? (s.busts / s.x01).toLocaleString('de-DE', { maximumFractionDigits: 2 }) : '–')),
         s.avgs.length >= 2 ? [sparkline(s.avgs.slice(-12)), h('p', { class: 'spark-cap' }, `3-Dart-Ø der letzten ${Math.min(12, s.avgs.length)} X01-Spiele`)] : null));
     }
+    out.push(syncCard());
     out.push(dataCard());
     return out;
   }
@@ -1604,26 +1605,111 @@ const Dart = (() => {
   window.addEventListener('hashchange', route);
 
   /* ---------- boot ---------- */
+  const SYNC_LS = 'dart-zaehler-abgleich';
+  function syncConf() { try { return JSON.parse(localStorage.getItem(SYNC_LS) || 'null'); } catch (e) { return null; } }
   function localCol() {
     const KEY = 'dart-zaehler-daten';
     let data = {};
     try { data = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { data = {}; }
     const subs = [];
     const emit = () => {
-      const docs = Object.entries(data).map(([id, x]) => ({ id, data: () => x }));
+      const docs = Object.entries(data).filter(([, x]) => x && !x._deleted).map(([id, x]) => ({ id, data: () => x }));
       subs.forEach((f) => f({ docs, metadata: { fromCache: false, hasPendingWrites: false } }));
     };
     const save = () => {
       try { localStorage.setItem(KEY, JSON.stringify(data)); }
       catch (e) { note('Speichern auf diesem Gerät hat nicht geklappt. Ist der Speicher voll?'); }
     };
+    const outbox = {};
+    let pushTimer = null;
+    const call = async (method, body) => {
+      const c = syncConf();
+      if (!c) return null;
+      const res = await fetch(c.url.replace(/\/+$/, '') + '/docs', {
+        method, headers: { Authorization: 'Bearer ' + c.key, 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined, cache: 'no-store',
+      });
+      if (res.status === 401) throw new Error('Der Abgleich-Code stimmt nicht.');
+      if (!res.ok) throw new Error('Server antwortet nicht (' + res.status + ').');
+      return res.json();
+    };
+    const setStatus = (ok, msg) => { S.syncState = { ok, msg, at: Date.now() }; if (S.view === 'spieler') render(); };
+    const flushPush = async () => {
+      pushTimer = null;
+      const batch = { ...outbox };
+      for (const k of Object.keys(batch)) delete outbox[k];
+      if (!Object.keys(batch).length || !syncConf()) return;
+      try { await call('POST', batch); setStatus(true, 'Abgeglichen'); }
+      catch (e) { Object.assign(outbox, batch); setStatus(false, e.message || 'Abgleich fehlgeschlagen'); }
+    };
+    const queue = (id) => { outbox[id] = data[id]; if (!pushTimer) pushTimer = setTimeout(flushPush, 800); };
+    let syncing = false;
+    const sync = async () => {
+      if (syncing || !syncConf()) return;
+      syncing = true;
+      try {
+        const remote = (await call('GET')) || {};
+        let changed = false;
+        for (const [id, r] of Object.entries(remote)) {
+          const l = data[id];
+          if (r && (!l || (r._t || 0) > (l._t || 0))) { data[id] = r; changed = true; }
+        }
+        for (const [id, l] of Object.entries(data)) {
+          const r = remote[id];
+          if (!r || (l._t || 0) > (r._t || 0)) outbox[id] = l;
+        }
+        if (changed) { save(); emit(); }
+        await flushPush();
+        setStatus(true, 'Abgeglichen');
+      } catch (e) {
+        setStatus(false, e.message || 'Abgleich fehlgeschlagen');
+      } finally { syncing = false; }
+    };
+    S.syncNow = sync;
+    setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 20000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
+    setTimeout(sync, 300);
     return {
       doc: (id) => ({
-        set: async (d) => { data[id] = JSON.parse(JSON.stringify(d)); save(); setTimeout(emit, 0); },
-        delete: async () => { delete data[id]; save(); setTimeout(emit, 0); },
+        set: async (d) => { data[id] = { ...JSON.parse(JSON.stringify(d)), _t: Date.now() }; save(); queue(id); setTimeout(emit, 0); },
+        delete: async () => { data[id] = { _deleted: true, _t: Date.now() }; save(); queue(id); setTimeout(emit, 0); },
       }),
       onSnapshot: (f) => { subs.push(f); setTimeout(emit, 0); return () => {}; },
     };
+  }
+  function syncCard() {
+    if (window.claude) return null;
+    const c = syncConf();
+    const st = S.syncState;
+    if (c) {
+      const when = st ? new Date(st.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : null;
+      return h('div', { class: 'card' },
+        h('h3', null, 'Abgleich zwischen Geräten'),
+        h('p', { class: 'help', role: 'status' }, !st ? 'Verbunden. Gleicht gleich ab …' : st.ok ? `Verbunden · zuletzt abgeglichen um ${when}` : `Problem beim Abgleich: ${st.msg}`),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', onclick: () => { S.syncNow && S.syncNow(); } }, 'Jetzt abgleichen'),
+          S.confirm === 'sync-off'
+            ? h('button', { class: 'btn danger', type: 'button', onclick: () => { try { localStorage.removeItem(SYNC_LS); } catch (e) { /* ignore */ } S.syncState = null; S.confirm = null; render(); } }, 'Wirklich trennen')
+            : h('button', { class: 'btn ghost', type: 'button', onclick: () => { S.confirm = 'sync-off'; render(); } }, 'Trennen')));
+    }
+    return h('div', { class: 'card' },
+      h('h3', null, 'Abgleich zwischen Geräten'),
+      h('p', { class: 'help' }, 'Füg hier deinen Abgleich-Code ein. Dann landen Spieler und Spiele automatisch auf allen Geräten, die denselben Code haben.'),
+      h('form', {
+        class: 'field', autocomplete: 'off',
+        onsubmit: (e) => {
+          e.preventDefault();
+          const raw = e.target.querySelector('textarea').value.replace(/\s+/g, '');
+          const m = /^(https:\/\/[^#]+)#([0-9a-f]{20,})$/i.exec(raw);
+          if (!m) { S.dataMsg = null; S.syncState = { ok: false, msg: 'Der Code hat nicht das richtige Format. Kopier ihn nochmal komplett.', at: Date.now() }; render(); return; }
+          try { localStorage.setItem(SYNC_LS, JSON.stringify({ url: m[1].toLowerCase(), key: m[2].toLowerCase() })); } catch (err) { /* ignore */ }
+          S.syncState = null; render();
+          if (S.syncNow) S.syncNow();
+        },
+      }, h('label', { class: 'sr', for: 'sync-code' }, 'Abgleich-Code'),
+      h('textarea', { id: 'sync-code', class: 'code', rows: '2', placeholder: 'Abgleich-Code einfügen', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }),
+      h('button', { class: 'btn', type: 'submit' }, 'Verbinden')),
+      st && !st.ok ? h('p', { class: 'help', role: 'status' }, st.msg) : null);
   }
   async function boot() {
     if (!window.claude) {
