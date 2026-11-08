@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -62,8 +62,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: .05em; text-transform: uppercase; }
 .brand svg { flex: none; }
 @media (max-width: 520px) { .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--panel); border-radius: 999px; padding: 4px; }
-.tabs a { color: var(--muted); text-decoration: none; text-align: center; padding: 7px 0; border-radius: 999px; font-weight: 600; font-size: 15px; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--panel); border-radius: 999px; padding: 4px; }
+.tabs a { color: var(--muted); text-decoration: none; text-align: center; padding: 7px 2px; border-radius: 999px; font-weight: 600; font-size: 14px; white-space: nowrap; }
 .tabs a[aria-current="page"] { background: var(--sisal); color: var(--board); }
 .iconbtn {
   width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2);
@@ -286,7 +286,7 @@ input[type="text"]::placeholder { color: var(--muted); }
   .kv dd { font-size: 22px; }
 }
 
-.code { width: 100%; background: var(--panel-2); color: var(--sisal); border: 1px solid var(--line); border-radius: var(--r); padding: 8px; font: 12px/1.3 ui-monospace, Menlo, monospace; word-break: break-all; }
+.code { width: 100%; background: var(--panel-2); color: var(--sisal); border: 1px solid var(--line); border-radius: var(--r); padding: 8px; font: 16px/1.3 ui-monospace, Menlo, monospace; word-break: break-all; }
 
 /* Tablets: use the whole screen, bigger targets */
 @media (min-width: 700px) {
@@ -328,6 +328,16 @@ input[type="text"]::placeholder { color: var(--muted); }
   .dock { flex: 0 0 44%; border-top: 0; border-left: 1px solid var(--line); padding: 14px 0 14px 24px; justify-content: center; }
 }
 
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+.stat-table th, .stat-table td { padding: 8px 8px; }
+.stat-table .pn { font-weight: 600; text-align: left; position: sticky; left: 0; background: var(--board); }
+.stat-table thead th:nth-child(2) { position: sticky; left: 0; background: var(--board); text-align: left; }
+.stat-table .rank { color: var(--muted); width: 28px; }
+.stat-table td.on { color: var(--sisal); font-weight: 700; }
+.sortbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.sortbtn.on { color: var(--sisal); }
+@media (min-width: 700px) { .stat-table { font-size: 18px; } .stat-table th { font-size: 15px; } }
+
 .app { padding-top: calc(env(safe-area-inset-top) + 14px); padding-bottom: env(safe-area-inset-bottom); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
 </style>
 </head>
@@ -346,6 +356,7 @@ input[type="text"]::placeholder { color: var(--muted); }
     <nav class="tabs" aria-label="Bereiche">
       <a href="#spiel" data-view="spiel">Spiel</a>
       <a href="#spieler" data-view="spieler">Spieler</a>
+      <a href="#statistik" data-view="statistik">Statistik</a>
       <a href="#verlauf" data-view="verlauf">Verlauf</a>
     </nav>
     <button id="speaker" class="iconbtn" type="button" aria-pressed="true" aria-label="Ansagen vorlesen">
@@ -407,6 +418,7 @@ input[type="text"]::placeholder { color: var(--muted); }
       </div>
     </section>
     <section id="view-spieler" class="view" aria-label="Spieler" hidden></section>
+    <section id="view-statistik" class="view" aria-label="Statistik" hidden></section>
     <section id="view-verlauf" class="view" aria-label="Verlauf" hidden></section>
   </main>
 </div>
@@ -1138,7 +1150,7 @@ const Dart = (() => {
     const fid = ae && ae.id && ae !== document.body ? ae.id : null;
     const val = fid && 'value' in ae ? ae.value : null;
     $$('.tabs a').forEach((a) => { if (a.dataset.view === S.view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-    ['spiel', 'spieler', 'verlauf'].forEach((v) => { $('#view-' + v).hidden = v !== S.view; });
+    ['spiel', 'spieler', 'statistik', 'verlauf'].forEach((v) => { $('#view-' + v).hidden = v !== S.view; });
     const inGame = S.view === 'spiel' && S.game && S.game.status === 'running';
     $('.top').hidden = !!inGame && !S.navOpen;
     const sp = $('#speaker');
@@ -1146,6 +1158,7 @@ const Dart = (() => {
     sp.setAttribute('title', S.muted ? 'Ton ist aus' : 'Ton ist an');
     if (S.view === 'spiel') renderGameView();
     else if (S.view === 'spieler') $('#view-spieler').replaceChildren(...buildPlayers());
+    else if (S.view === 'statistik') $('#view-statistik').replaceChildren(...buildStats());
     else $('#view-verlauf').replaceChildren(...buildHistory());
     if (fid && fid !== 'call') {
       const el = document.getElementById(fid);
@@ -1505,7 +1518,7 @@ const Dart = (() => {
     const msg = S.dataMsg ? h('p', { class: 'help', role: 'status' }, S.dataMsg) : null;
     return h('div', { class: 'card' },
       h('h3', null, 'Daten übertragen'),
-      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 5)'),
+      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 6)'),
       h('button', {
         class: 'btn', type: 'button',
         onclick: async () => {
@@ -1585,6 +1598,101 @@ const Dart = (() => {
     else val = `${v.score} auf die ${v.target}`;
     return h('li', null, h('span', { class: 'n' }, `${i + 1}.`), h('span', null, v.darts.map(D.label).join(' · ')), h('span', null, val));
   }
+  /* ---------- statistics tab ---------- */
+  const STAT_MODES = [
+    ['gesamt', 'Gesamt'], ['x01-301', '301'], ['x01-501', '501'], ['x01-701', '701'],
+    ['cricket', 'Cricket'], ['atc', 'Around the Clock'], ['shanghai', 'Shanghai'],
+  ];
+  const modeOf = (g) => (g.type === 'x01' ? 'x01-' + g.opts.start : g.type);
+  const STAT_COLS = {
+    gesamt: [['spiele', 'Spiele'], ['siege', 'Siege'], ['quote', 'Siegquote', 'pct'], ['avg', '3-Dart-Ø', 'f1'], ['punkte', 'X01-Punkte'], ['best', 'Bester Wurf'], ['co', 'Höchstes Finish'], ['pfeile', 'Pfeile']],
+    x01: [['spiele', 'Spiele'], ['siege', 'Siege'], ['avg', '3-Dart-Ø', 'f1'], ['punkte', 'Punkte'], ['best', 'Bester Wurf'], ['co', 'Höchstes Finish'], ['dpg', 'Ø Pfeile/Spiel', 'f1', true], ['t100', '100+'], ['t180', '180er'], ['bpg', 'Überworfen/Spiel', 'f2', true]],
+    cricket: [['spiele', 'Spiele'], ['siege', 'Siege'], ['punkte', 'Punkte'], ['ppg', 'Ø Punkte', 'f1'], ['mpr', 'Marks/Runde', 'f2'], ['bestp', 'Beste Punkte'], ['pfeile', 'Pfeile']],
+    atc: [['spiele', 'Spiele'], ['siege', 'Siege'], ['dpg', 'Ø Pfeile/Spiel', 'f1', true], ['bestd', 'Wenigste Pfeile', null, true], ['rate', 'Trefferquote', 'pct']],
+    shanghai: [['spiele', 'Spiele'], ['siege', 'Siege'], ['punkte', 'Punkte'], ['ppg', 'Ø Punkte', 'f1'], ['bestp', 'Beste Punkte'], ['sh', 'Shanghais']],
+  };
+  const colsFor = (m) => STAT_COLS[m.startsWith('x01') ? 'x01' : m];
+  function statsRows(mode) {
+    const acc = new Map();
+    for (const { data: g } of S.games) {
+      if (mode !== 'gesamt' && modeOf(g) !== mode) continue;
+      const st = rep(g);
+      const multi = g.players.length > 1;
+      st.players.forEach((P, i) => {
+        let a = acc.get(P.id);
+        if (!a) { a = { id: P.id, name: nameOf(P.id, P.name), spiele: 0, siege: 0, multi: 0, punkte: 0, xp: 0, xd: 0, best: 0, co: 0, pfeile: 0, fin: 0, findarts: 0, busts: 0, t100: 0, t180: 0, marks: 0, visits: 0, bestp: 0, bestd: 0, hits: 0, sh: 0 }; acc.set(P.id, a); }
+        a.spiele++; a.pfeile += P.darts;
+        if (multi) { a.multi++; if (st.winner === i && !st.tie) a.siege++; }
+        if (g.type === 'x01') {
+          const x = D.x01Stats(g, P);
+          a.punkte += x.points; a.xp += x.points; a.xd += x.darts; a.best = Math.max(a.best, x.best); a.busts += x.busts; a.t100 += x.t100; a.t180 += x.t180;
+          if (x.checkout) { a.co = Math.max(a.co, x.checkout); a.fin++; a.findarts += x.darts; }
+        } else if (g.type === 'cricket') {
+          a.punkte += P.points; a.bestp = Math.max(a.bestp, P.points); a.visits += P.visits.length; a.marks += P.visits.reduce((s, v) => s + v.marks, 0);
+        } else if (g.type === 'atc') {
+          a.hits += P.hits;
+          if (P.idx >= D.atcSeq(g).length) { a.fin++; a.findarts += P.darts; a.bestd = a.bestd ? Math.min(a.bestd, P.darts) : P.darts; }
+        } else if (g.type === 'shanghai') {
+          a.punkte += P.points; a.bestp = Math.max(a.bestp, P.points); if (P.visits.some((v) => v.shanghai)) a.sh++;
+        }
+      });
+    }
+    return [...acc.values()].map((a) => ({
+      ...a,
+      quote: a.multi ? a.siege / a.multi : null,
+      avg: a.xd ? (a.xp / a.xd) * 3 : null,
+      punkte: mode === 'gesamt' ? a.xp : a.punkte,
+      dpg: a.fin ? a.findarts / a.fin : null,
+      bpg: a.spiele ? a.busts / a.spiele : null,
+      ppg: a.spiele ? a.punkte / a.spiele : null,
+      mpr: a.visits ? a.marks / a.visits : null,
+      rate: a.pfeile ? a.hits / a.pfeile : null,
+      bestd: a.bestd || null,
+      co: a.co || null,
+      best: a.best || null,
+    }));
+  }
+  function fmtStat(v, kind) {
+    if (v == null || Number.isNaN(v)) return '–';
+    if (kind === 'pct') return Math.round(v * 100) + ' %';
+    if (kind === 'f1') return nf1.format(v);
+    if (kind === 'f2') return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return v.toLocaleString('de-DE');
+  }
+  function buildStats() {
+    const out = [h('h2', { class: 'h' }, 'Statistik')];
+    const played = new Set(S.games.map(({ data }) => modeOf(data)));
+    const modes = STAT_MODES.filter(([m]) => m === 'gesamt' || played.has(m));
+    if (!modes.some(([m]) => m === S.statMode)) S.statMode = 'gesamt';
+    const mode = S.statMode || 'gesamt';
+    out.push(h('div', { class: 'seg', role: 'group', 'aria-label': 'Spielmodus' }, modes.map(([m, lab]) => h('button', {
+      type: 'button', 'aria-pressed': String(m === mode), onclick: () => { S.statMode = m; S.statSort = null; render(); },
+    }, lab))));
+    const rows = statsRows(mode);
+    if (!rows.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine fertigen Spiele.' : 'Wird geladen …')); return out; }
+    const cols = colsFor(mode);
+    const defKey = mode === 'gesamt' ? 'siege' : mode.startsWith('x01') ? 'avg' : mode === 'atc' ? 'dpg' : 'punkte';
+    const sort = S.statSort || { key: defKey, asc: !!(cols.find((c) => c[0] === defKey) || [])[3] };
+    rows.sort((a, b) => {
+      const x = a[sort.key], y = b[sort.key];
+      if (x == null && y == null) return a.name.localeCompare(b.name);
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return sort.asc ? x - y : y - x;
+    });
+    out.push(h('p', { class: 'help' }, 'Tipp auf eine Spaltenüberschrift, um danach zu sortieren. Siege zählen nur in Spielen mit mehreren Spielern.'));
+    out.push(h('div', { class: 'scroll-x stat-wrap' }, h('table', { class: 'stats stat-table' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, '#'), h('th', { scope: 'col' }, 'Spieler'),
+        cols.map(([key, lab, , lowBetter]) => h('th', { scope: 'col', 'aria-sort': sort.key === key ? (sort.asc ? 'ascending' : 'descending') : null },
+          h('button', {
+            type: 'button', class: 'sortbtn' + (sort.key === key ? ' on' : ''),
+            onclick: () => { S.statSort = sort.key === key ? { key, asc: !sort.asc } : { key, asc: !!lowBetter }; render(); },
+          }, lab, sort.key === key ? (sort.asc ? ' ↑' : ' ↓') : ''))))),
+      h('tbody', null, rows.map((r, i) => h('tr', null, h('td', { class: 'rank' }, String(i + 1)), h('td', { class: 'pn' }, r.name),
+        cols.map(([key, , kind]) => h('td', { class: sort.key === key ? 'on' : null }, fmtStat(r[key], kind)))))))));
+    return out;
+  }
+
   function buildHistory() {
     const out = [h('h2', { class: 'h' }, 'Verlauf')];
     if (!S.games.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine fertigen Spiele.' : 'Verlauf wird geladen …')); return out; }
@@ -1610,6 +1718,9 @@ const Dart = (() => {
   }
 
   window.addEventListener('error', (e) => { note('Fehler in der App: ' + (e && e.message ? e.message : 'unbekannt') + '. Schick mir diese Meldung, dann behebe ich es.'); });
+
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  document.addEventListener('touchmove', (e) => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
   /* ---------- events ---------- */
   $('#pad').addEventListener('click', (e) => {
@@ -1638,7 +1749,7 @@ const Dart = (() => {
   });
   function route() {
     const v = (location.hash || '#spiel').slice(1);
-    S.view = ['spiel', 'spieler', 'verlauf'].includes(v) ? v : 'spiel';
+    S.view = ['spiel', 'spieler', 'statistik', 'verlauf'].includes(v) ? v : 'spiel';
     S.confirm = null; S.renaming = null; S.navOpen = false;
     render();
   }
