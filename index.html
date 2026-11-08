@@ -1233,7 +1233,7 @@ const Dart = (() => {
     const out = [h('h2', { class: 'h' }, 'Neues Spiel')];
     out.push(field('Spielart', seg('type', [['x01', 'X01'], ['cricket', 'Cricket'], ['atc', 'Around the Clock'], ['shanghai', 'Shanghai']], su.type)));
     if (su.type === 'x01') {
-      out.push(field('Startpunkte', seg('start', [[301, '301'], [501, '501'], [701, '701']], su.start)));
+      out.push(field('Startpunkte', seg('start', [[101, '101'], [201, '201'], [301, '301'], [401, '401'], [501, '501'], [701, '701']], su.start)));
       out.push(field('Einstieg', seg('in', [['straight', 'Straight'], ['double', 'Double'], ['triple', 'Triple'], ['master', 'Master']], su.in), h('p', { class: 'help' }, IN_HELP[su.in])));
       out.push(field('Finish', seg('out', [['single', 'Single'], ['double', 'Double'], ['triple', 'Triple'], ['master', 'Master']], su.out), h('p', { class: 'help' }, OUT_HELP[su.out])));
     } else if (su.type === 'cricket') {
@@ -1518,7 +1518,7 @@ const Dart = (() => {
     const msg = S.dataMsg ? h('p', { class: 'help', role: 'status' }, S.dataMsg) : null;
     return h('div', { class: 'card' },
       h('h3', null, 'Daten übertragen'),
-      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 6)'),
+      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein. (App-Stand: 8. Nov., Version 7)'),
       h('button', {
         class: 'btn', type: 'button',
         onclick: async () => {
@@ -1612,10 +1612,17 @@ const Dart = (() => {
     shanghai: [['spiele', 'Spiele'], ['siege', 'Siege'], ['punkte', 'Punkte'], ['ppg', 'Ø Punkte', 'f1'], ['bestp', 'Beste Punkte'], ['sh', 'Shanghais']],
   };
   const colsFor = (m) => STAT_COLS[m.startsWith('x01') ? 'x01' : m];
+  function gameFilter(g) {
+    const n = g.players.length;
+    if (S.statN && (S.statN === 4 ? n < 4 : n !== S.statN)) return false;
+    if (S.statWith && !g.players.some((p) => p.id === S.statWith)) return false;
+    return true;
+  }
   function statsRows(mode) {
     const acc = new Map();
     for (const { data: g } of S.games) {
       if (mode !== 'gesamt' && modeOf(g) !== mode) continue;
+      if (!gameFilter(g)) continue;
       const st = rep(g);
       const multi = g.players.length > 1;
       st.players.forEach((P, i) => {
@@ -1662,14 +1669,29 @@ const Dart = (() => {
   function buildStats() {
     const out = [h('h2', { class: 'h' }, 'Statistik')];
     const played = new Set(S.games.map(({ data }) => modeOf(data)));
-    const modes = STAT_MODES.filter(([m]) => m === 'gesamt' || played.has(m));
+    const starts = [...new Set(S.games.filter(({ data }) => data.type === 'x01').map(({ data }) => data.opts.start))].sort((a, b) => a - b);
+    const modes = [['gesamt', 'Gesamt'], ...starts.map((s) => ['x01-' + s, String(s)]), ...STAT_MODES.filter(([m]) => !m.startsWith('x01') && m !== 'gesamt' && played.has(m))];
     if (!modes.some(([m]) => m === S.statMode)) S.statMode = 'gesamt';
     const mode = S.statMode || 'gesamt';
     out.push(h('div', { class: 'seg', role: 'group', 'aria-label': 'Spielmodus' }, modes.map(([m, lab]) => h('button', {
       type: 'button', 'aria-pressed': String(m === mode), onclick: () => { S.statMode = m; S.statSort = null; render(); },
     }, lab))));
+    const counts = new Set(S.games.map(({ data }) => Math.min(4, data.players.length)));
+    const nOpts = [[0, 'Alle'], [1, 'Allein'], [2, 'Zu zweit'], [3, 'Zu dritt'], [4, '4 und mehr']].filter(([n]) => n === 0 || counts.has(n));
+    if (S.statN && !counts.has(S.statN)) S.statN = 0;
+    out.push(h('div', { class: 'field' }, h('span', { class: 'lab' }, 'Spieleranzahl'),
+      h('div', { class: 'seg', role: 'group', 'aria-label': 'Spieleranzahl' }, nOpts.map(([n, lab]) => h('button', {
+        type: 'button', 'aria-pressed': String((S.statN || 0) === n), onclick: () => { S.statN = n; render(); },
+      }, lab)))));
+    const known = S.players.filter((p) => S.games.some(({ data }) => data.players.length > 1 && data.players.some((q) => q.id === p.id)));
+    if (S.statWith && !known.some((p) => p.id === S.statWith)) S.statWith = null;
+    if (known.length) {
+      out.push(h('div', { class: 'field' }, h('span', { class: 'lab' }, 'Gespielt mit'),
+        h('div', { class: 'chips' }, [h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!S.statWith), onclick: () => { S.statWith = null; render(); } }, 'Allen'),
+          ...known.map((p) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(S.statWith === p.id), onclick: () => { S.statWith = S.statWith === p.id ? null : p.id; render(); } }, p.name))])));
+    }
     const rows = statsRows(mode);
-    if (!rows.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine fertigen Spiele.' : 'Wird geladen …')); return out; }
+    if (!rows.length) { out.push(h('p', { class: 'muted' }, !S.loaded ? 'Wird geladen …' : S.games.length ? 'Für diese Auswahl gibt es noch keine Spiele.' : 'Noch keine fertigen Spiele.')); return out; }
     const cols = colsFor(mode);
     const defKey = mode === 'gesamt' ? 'siege' : mode.startsWith('x01') ? 'avg' : mode === 'atc' ? 'dpg' : 'punkte';
     const sort = S.statSort || { key: defKey, asc: !!(cols.find((c) => c[0] === defKey) || [])[3] };
