@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dart">
+<meta name="theme-color" content="#101210">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Dart-Zähler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Big+Shoulders+Display:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+:root {
+  /* One visual world: the board itself. Black panel, sisal text, red = double ring, green = triple ring. */
+  /* Layout: one phone-width column; scoreboard on top, keypad pinned to the thumb zone like a scorer's slate. */
+  --board: #101210;
+  --panel: #1a1d19;
+  --panel-2: #242822;
+  --line: #353b33;
+  --sisal: #efe6cf;
+  --muted: #a39f8d;
+  --red: #d42b40;
+  --green: #1f9c58;
+  --amber: #e7ae3d;
+  --display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --body: "Barlow", "Segoe UI", Roboto, system-ui, sans-serif;
+  --r: 10px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--board);
+  color: var(--sisal);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+:focus-visible { outline: 2px solid var(--sisal); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+
+.app { max-width: 560px; margin: 0 auto; padding: 0 16px; height: 100%; display: flex; flex-direction: column; }
+
+/* Top bar */
+.top {
+  flex: none; background: var(--board);
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 12px 0 10px; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: .05em; text-transform: uppercase; }
+.brand svg { flex: none; }
+@media (max-width: 520px) { .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--panel); border-radius: 999px; padding: 4px; }
+.tabs a { color: var(--muted); text-decoration: none; text-align: center; padding: 7px 0; border-radius: 999px; font-weight: 600; font-size: 15px; }
+.tabs a[aria-current="page"] { background: var(--sisal); color: var(--board); }
+.iconbtn {
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2);
+  display: grid; place-items: center; padding: 0;
+}
+.iconbtn svg { width: 24px; height: 24px; }
+#speaker .off { display: none; }
+#speaker[aria-pressed="false"] .on { display: none; }
+#speaker[aria-pressed="false"] .off { display: inline; }
+#speaker[aria-pressed="false"] { border-color: var(--red); color: var(--red); }
+
+.note { flex: none; margin: 10px 0 0; padding: 10px 12px; border-radius: var(--r); background: var(--panel); border-left: 4px solid var(--amber); font-size: 14px; }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.view { display: flex; flex-direction: column; gap: 14px; padding: 14px 0 24px; flex: 1; min-height: 0; overflow-y: auto; }
+#view-spiel { overflow: hidden; padding: 0; gap: 0; }
+#stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 14px; }
+#setup, #board { display: flex; flex-direction: column; gap: 14px; }
+#setup[hidden], #board[hidden] { display: none; }
+.view[hidden] { display: none; }
+h2.h { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+h3 { margin: 0; font-size: 18px; font-weight: 600; }
+
+/* Buttons and controls */
+.btn {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: var(--r);
+  padding: 11px 14px; font-weight: 600; font-size: 15px; line-height: 1.2;
+}
+.btn.primary { background: var(--sisal); color: var(--board); border-color: var(--sisal); }
+.btn.wide { padding: 15px 16px; font-size: 18px; font-family: var(--display); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.btn.ghost { background: transparent; }
+.btn.danger { border-color: var(--red); color: var(--red); }
+.btn.slim { padding: 7px 10px; font-size: 14px; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field > .lab { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { flex: 1 1 0; min-width: 70px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 10px 6px; font-weight: 600; font-size: 15px; }
+.seg button[aria-pressed="true"] { background: var(--sisal); color: var(--board); border-color: var(--sisal); }
+.help { margin: 0; font-size: 14px; color: var(--muted); }
+input[type="text"] {
+  width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 11px 12px; font-size: 16px;
+}
+input[type="text"]::placeholder { color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > input { flex: 1; }
+
+/* Player picker */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 14px; font-weight: 600; }
+.chip[aria-pressed="true"] { border-color: var(--sisal); background: var(--panel-2); }
+.chip .ord { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff; font-size: 13px; font-weight: 700; }
+
+/* Game header */
+.top[hidden] { display: none; }
+.ghead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.gtitle { flex: 1; min-width: 0; }
+.menubtn { flex: none; width: 42px; height: 42px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel-2); display: grid; place-items: center; padding: 0; }
+.menubtn .bars { display: flex; flex-direction: column; gap: 4px; }
+.menubtn .bars i { display: block; width: 20px; height: 2px; border-radius: 1px; background: var(--sisal); }
+.menubtn[aria-expanded="true"] { border-color: var(--sisal); }
+.mode { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: .04em; text-transform: uppercase; }
+
+/* Scoreboard cards */
+.plist { display: flex; flex-direction: column; gap: 8px; }
+.pcard {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px;
+  display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 2px 12px;
+}
+.pcard.cur { border-color: var(--sisal); box-shadow: inset 5px 0 0 var(--red); padding-left: 18px; }
+.pcard.win { box-shadow: inset 5px 0 0 var(--green); padding-left: 18px; }
+.pname { font-weight: 600; font-size: 17px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pmeta { grid-column: 1 / -1; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.big { font-family: var(--display); font-weight: 800; line-height: .9; font-variant-numeric: tabular-nums; font-size: 44px; text-align: right; }
+.pcard.cur .big { font-size: 62px; }
+.pcard.cur { padding-top: 7px; padding-bottom: 8px; }
+.pcard.cur .pname { font-size: 22px; justify-content: center; }
+.pleft { display: flex; flex-direction: column; align-items: center; text-align: center; align-self: start; gap: 4px; padding-top: 4px; min-width: 0; margin-left: -12px; }
+.pcard.cur .pmeta { font-size: min(18px, 4.4vw); color: var(--sisal); opacity: .8; white-space: nowrap; }
+.pcard.cur { column-gap: 8px; }
+.others { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.oth { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; }
+.oth .on { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oth .ov { font-family: var(--display); font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
+.oth.cur { border-color: var(--sisal); box-shadow: inset 0 -3px 0 var(--red); }
+.oth.win { border-color: var(--green); box-shadow: inset 0 -3px 0 var(--green); }
+.big .unit { display: block; font-family: var(--body); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.win { border-color: var(--green); color: var(--green); }
+.pill.warn { border-color: var(--amber); color: var(--amber); }
+.bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--green); }
+
+/* Current player card: name + stats on top, last visit, then slots beside Rest */
+.pcard.hero { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 14px 10px 18px; }
+.hrow1 { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.pcard.hero .pname { justify-content: flex-start; line-height: 1.1; }
+.hstats { display: flex; gap: 12px; flex: none; }
+.hstats > div { display: flex; flex-direction: column; align-items: center; }
+.hstats .sk { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.hstats .sv { font-family: var(--display); font-weight: 800; font-size: 21px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.pcard.hero .pmeta { text-align: left; }
+.hrow3 { display: flex; align-items: flex-end; gap: 12px; }
+.hslots { flex: 1; min-width: 0; }
+.visit.nosum { grid-template-columns: repeat(3, 1fr); }
+.hrest { flex: none; display: flex; flex-direction: column; align-items: center; }
+.hrest .unit { font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.hrest .num { font-family: var(--display); font-weight: 800; font-size: 62px; line-height: .82; font-variant-numeric: tabular-nums; }
+
+/* Stats bar above the Rest card */
+.statbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 14px; }
+.statbar > div { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.statbar .sk { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.statbar .sv { font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+/* Other players listed under the current card */
+.olist { display: flex; flex-direction: column; gap: 6px; }
+.orow { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 7px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.orow.win { border-color: var(--green); box-shadow: inset 4px 0 0 var(--green); }
+.oleft { display: flex; flex-direction: column; min-width: 0; }
+.orow .on { font-weight: 600; font-size: 17px; }
+.orow .om { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orow .ov { font-family: var(--display); font-weight: 800; font-size: 30px; font-variant-numeric: tabular-nums; flex: none; }
+
+/* Current visit */
+.visit { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 6px; align-items: stretch; }
+.slot { border: 1px dashed var(--line); border-radius: 8px; text-align: center; padding: 6px 0; font-family: var(--display); font-weight: 700; font-size: 24px; min-height: 44px; }
+.slot.filled { border-style: solid; background: var(--panel-2); }
+.slot.next { border-color: var(--sisal); }
+.vsum { display: grid; place-items: center; padding: 0 10px; font-family: var(--display); font-weight: 800; font-size: 26px; min-width: 64px; font-variant-numeric: tabular-nums; }
+.t { color: #3fc47d; }
+.d { color: #f0566a; }
+
+/* Finish suggestions: combos left, Rest beside the middle line */
+.co { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; row-gap: 8px; column-gap: 12px; align-items: center; font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: .02em; }
+.co-line { grid-column: 1; }
+.co-rest { grid-column: 2; font-size: 20px; color: var(--muted); }
+.co-rest b { color: var(--sisal); font-size: 28px; font-weight: 800; }
+.co .muted { font-family: var(--body); font-size: 15px; font-weight: 500; }
+
+/* Cricket */
+.cric { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-variant-numeric: tabular-nums; }
+.cric th, .cric td { text-align: center; padding: 6px 4px; }
+.cric thead th { font-size: 14px; font-weight: 600; color: var(--muted); }
+.cric thead th.cur { color: var(--sisal); box-shadow: inset 0 -3px 0 var(--red); }
+.cric tbody th { font-family: var(--display); font-weight: 800; font-size: 24px; width: 70px; background: var(--panel); border-radius: 8px 0 0 8px; }
+.cric tbody td { background: var(--panel); font-family: var(--display); font-weight: 800; font-size: 24px; }
+.cric tbody td:last-child { border-radius: 0 8px 8px 0; }
+.cric td.m3 { color: var(--green); }
+.cric tr.dead th, .cric tr.dead td { opacity: .35; }
+.cric tfoot td, .cric tfoot th { font-family: var(--display); font-weight: 800; font-size: 26px; padding-top: 8px; }
+.cric tfoot th { font-size: 14px; font-family: var(--body); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+/* Game over */
+.over { background: var(--panel); border: 1px solid var(--green); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.over h3 { font-family: var(--display); font-weight: 800; font-size: 32px; text-transform: uppercase; letter-spacing: .03em; }
+.stats { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.stats th, .stats td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.stats th:first-child, .stats td:first-child { text-align: left; }
+.stats th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.scroll-x { overflow-x: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions .btn { flex: 1 1 auto; }
+
+/* Dock: reply, call bar and keypad stay in reach */
+.dock { flex: none; background: var(--board); padding: 8px 0 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.reply { display: flex; gap: 10px; align-items: flex-start; background: var(--panel-2); border-radius: var(--r); padding: 9px 10px 9px 12px; font-size: 15px; max-height: 120px; overflow-y: auto; }
+.reply[hidden] { display: none; }
+.reply .who { font-weight: 700; color: var(--green); flex: none; }
+.reply .txt { flex: 1; white-space: pre-wrap; }
+.reply.pending .txt { color: var(--muted); }
+.reply .x { flex: none; border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px; }
+.callbar { display: flex; gap: 6px; }
+.callbar input { flex: 1; }
+.callbar button { flex: none; width: 48px; border-radius: var(--r); border: 1px solid var(--sisal); background: var(--sisal); color: var(--board); display: grid; place-items: center; padding: 0; }
+.callbar button svg { width: 22px; height: 22px; }
+.pad { display: flex; flex-direction: column; gap: 6px; }
+.pad[hidden] { display: none; }
+.pad-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pad-row.acts { grid-template-columns: 1fr 1.4fr 1fr; }
+.pad-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.key {
+  height: 47px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2);
+  font-family: var(--display); font-weight: 700; font-size: 27px; padding: 0;
+  transition: transform .08s ease;
+}
+.key.txt { font-family: var(--body); font-size: 17px; font-weight: 600; }
+.key:active { transform: scale(.96); }
+.key.mod[aria-pressed="true"].dbl { background: var(--red); border-color: var(--red); color: #fff; }
+.key.mod[aria-pressed="true"].tpl { background: var(--green); border-color: var(--green); color: #fff; }
+.key.dbl { color: #f0566a; }
+.key.tpl { color: #3fc47d; }
+.pad[data-mod="2"] .num { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.pad[data-mod="3"] .num { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+
+/* Players and history */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; margin: 0; }
+.kv div { display: flex; flex-direction: column; }
+.kv dt { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
+.spark { width: 100%; height: 44px; display: block; }
+.spark-cap { font-size: 13px; color: var(--muted); margin: -4px 0 0; }
+.hres { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.hres .hname { font-weight: 600; }
+.hres .hval { margin-left: auto; color: var(--muted); font-size: 15px; }
+.vlist { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.vlist li { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.vlist .n { color: var(--muted); }
+.vlist .bust { color: var(--amber); }
+.date { font-size: 14px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .key { transition: none; }
+}
+@media (max-width: 380px) {
+  .pcard.cur .big { font-size: 54px; }
+  .key { height: 43px; font-size: 24px; }
+  .key.txt { font-size: 15px; }
+  .kv dd { font-size: 22px; }
+}
+
+.code { width: 100%; background: var(--panel-2); color: var(--sisal); border: 1px solid var(--line); border-radius: var(--r); padding: 8px; font: 12px/1.3 ui-monospace, Menlo, monospace; word-break: break-all; }
+
+.app { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+        <circle cx="15" cy="15" r="14" fill="#101210" stroke="#efe6cf" stroke-width="1.5"></circle>
+        <circle cx="15" cy="15" r="11" fill="none" stroke="#d42b40" stroke-width="2.5"></circle>
+        <circle cx="15" cy="15" r="6.5" fill="none" stroke="#1f9c58" stroke-width="2.5"></circle>
+        <circle cx="15" cy="15" r="2.6" fill="#d42b40"></circle>
+      </svg>
+      <span>Dart-Zähler</span>
+    </div>
+    <nav class="tabs" aria-label="Bereiche">
+      <a href="#spiel" data-view="spiel">Spiel</a>
+      <a href="#spieler" data-view="spieler">Spieler</a>
+      <a href="#verlauf" data-view="verlauf">Verlauf</a>
+    </nav>
+    <button id="speaker" class="iconbtn" type="button" aria-pressed="true" aria-label="Ansagen vorlesen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"></path>
+        <g class="on"><path d="M16.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 6a8.5 8.5 0 0 1 0 12"></path></g>
+        <g class="off"><path d="M16.5 9.5l5 5"></path><path d="M21.5 9.5l-5 5"></path></g>
+      </svg>
+    </button>
+  </header>
+  <div id="note" class="note" role="status" hidden></div>
+  <main>
+    <section id="view-spiel" class="view" aria-label="Spiel">
+      <div id="stage">
+        <div id="setup"></div>
+        <div id="board" hidden></div>
+      </div>
+      <div class="dock" id="dock">
+        <div id="reply" class="reply" role="status" hidden>
+          <span class="who">Claude</span>
+          <span class="txt" id="reply-txt"></span>
+          <button type="button" class="x" id="reply-close" aria-label="Antwort ausblenden">×</button>
+        </div>
+        <div id="pad" class="pad" data-mod="1" hidden>
+          <div class="pad-row">
+            <button type="button" class="key txt mod dbl" data-mod="2" aria-pressed="false">Doppel</button>
+            <button type="button" class="key txt mod tpl" data-mod="3" aria-pressed="false">Triple</button>
+            <button type="button" class="key txt" data-dart="25">Bull 25</button>
+            <button type="button" class="key txt" data-dart="50">Bullseye</button>
+          </div>
+          <div class="pad-grid">
+            <button type="button" class="key num" data-num="1">1</button>
+            <button type="button" class="key num" data-num="2">2</button>
+            <button type="button" class="key num" data-num="3">3</button>
+            <button type="button" class="key num" data-num="4">4</button>
+            <button type="button" class="key num" data-num="5">5</button>
+            <button type="button" class="key num" data-num="6">6</button>
+            <button type="button" class="key num" data-num="7">7</button>
+            <button type="button" class="key num" data-num="8">8</button>
+            <button type="button" class="key num" data-num="9">9</button>
+            <button type="button" class="key num" data-num="10">10</button>
+            <button type="button" class="key num" data-num="11">11</button>
+            <button type="button" class="key num" data-num="12">12</button>
+            <button type="button" class="key num" data-num="13">13</button>
+            <button type="button" class="key num" data-num="14">14</button>
+            <button type="button" class="key num" data-num="15">15</button>
+            <button type="button" class="key num" data-num="16">16</button>
+            <button type="button" class="key num" data-num="17">17</button>
+            <button type="button" class="key num" data-num="18">18</button>
+            <button type="button" class="key num" data-num="19">19</button>
+            <button type="button" class="key num" data-num="20">20</button>
+          </div>
+          <div class="pad-row acts">
+            <button type="button" class="key txt" data-dart="0">Daneben</button>
+            <button type="button" class="key txt" data-act="end">Aufnahme beenden</button>
+            <button type="button" class="key txt" data-act="undo">Zurück</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="view-spieler" class="view" aria-label="Spieler" hidden></section>
+    <section id="view-verlauf" class="view" aria-label="Verlauf" hidden></section>
+  </main>
+</div>
+<script>
+/* Dart engine: pure functions, no DOM. A game is {type, opts, players, darts[]}; state is replayed from the dart list. */
+const Dart = (() => {
+  const CRICKET = [20, 19, 18, 17, 16, 15, 25];
+  const IN = { straight: 'Straight In', double: 'Double In', triple: 'Triple In', master: 'Master In' };
+  const OUT = { single: 'Single Out', double: 'Double Out', triple: 'Triple Out', master: 'Master Out' };
+  const TYPE_NAMES = { x01: 'X01', cricket: 'Cricket', atc: 'Around the Clock', shanghai: 'Shanghai' };
+
+  function parse(code) {
+    const c = String(code).trim().toUpperCase();
+    if (c === '0') return { n: 0, m: 0, v: 0 };
+    if (c === '50' || c === 'D25') return { n: 25, m: 2, v: 50 };
+    if (c === '25' || c === 'S25') return { n: 25, m: 1, v: 25 };
+    const mm = /^([SDT]?)(\d{1,2})$/.exec(c);
+    if (!mm) return null;
+    const m = mm[1] === 'T' ? 3 : mm[1] === 'D' ? 2 : 1;
+    const n = +mm[2];
+    if (n < 1 || n > 20) return null;
+    return { n, m, v: n * m };
+  }
+  function norm(code) {
+    const d = parse(code);
+    if (!d) return null;
+    if (d.v === 0) return '0';
+    if (d.n === 25) return d.m === 2 ? '50' : '25';
+    return (d.m === 3 ? 'T' : d.m === 2 ? 'D' : '') + d.n;
+  }
+  function label(code) {
+    return code === '0' ? '0' : code === '25' ? 'Bull' : code === '50' ? 'Bullseye' : code;
+  }
+  function ruleOK(rule, d) {
+    if (rule === 'straight' || rule === 'single') return d.v > 0;
+    if (rule === 'double') return d.m === 2;
+    if (rule === 'triple') return d.m === 3;
+    if (rule === 'master') return d.m >= 2;
+    return false;
+  }
+  function dead(out, r) {
+    if (out === 'double' || out === 'master') return r === 1;
+    if (out === 'triple') return r === 1 || r === 2;
+    return false;
+  }
+  function atcSeq(g) {
+    const s = [];
+    for (let i = 1; i <= 20; i++) s.push(i);
+    if (g.opts.bull) s.push(25);
+    return s;
+  }
+
+  const TYPES = {
+    x01: {
+      initPlayer: (g, p) => ({ id: p.id, name: p.name, rest: g.opts.start, opened: g.opts.in === 'straight', visits: [], darts: 0, busts: 0 }),
+      newVisit: (st, P) => ({ darts: [], score: 0, bust: false, checkout: false, startRest: P.rest, startOpened: P.opened }),
+      dart(st, P, v, d) {
+        const o = st.g.opts;
+        if (!P.opened) {
+          if (ruleOK(o.in, d)) P.opened = true;
+          else return false;
+        }
+        const nr = P.rest - d.v;
+        if (nr < 0 || dead(o.out, nr) || (nr === 0 && !ruleOK(o.out, d))) {
+          v.bust = true; v.score = 0; P.rest = v.startRest; P.opened = v.startOpened; P.busts++;
+          return true;
+        }
+        P.rest = nr; v.score += d.v;
+        if (nr === 0) { v.checkout = true; st.over = true; st.winner = st.cur; return true; }
+        return false;
+      },
+    },
+    cricket: {
+      initPlayer: (g, p) => ({ id: p.id, name: p.name, marks: Object.fromEntries(CRICKET.map((t) => [t, 0])), points: 0, visits: [], darts: 0 }),
+      newVisit: () => ({ darts: [], marks: 0, score: 0 }),
+      dart(st, P, v, d) {
+        if (d.v === 0 || !CRICKET.includes(d.n)) return false;
+        for (let i = 0; i < d.m; i++) {
+          if (P.marks[d.n] < 3) P.marks[d.n]++;
+          else if (st.players.some((o) => o !== P && o.marks[d.n] < 3)) { P.points += d.n; v.score += d.n; }
+        }
+        v.marks += d.m;
+        if (CRICKET.every((t) => P.marks[t] >= 3) && st.players.every((o) => o === P || P.points >= o.points)) {
+          st.over = true; st.winner = st.cur; return true;
+        }
+        return false;
+      },
+    },
+    atc: {
+      initPlayer: (g, p) => ({ id: p.id, name: p.name, idx: 0, hits: 0, visits: [], darts: 0 }),
+      newVisit: () => ({ darts: [], hits: 0 }),
+      dart(st, P, v, d) {
+        const s = atcSeq(st.g);
+        if (d.v > 0 && d.n === s[P.idx]) {
+          P.idx++; P.hits++; v.hits++;
+          if (P.idx >= s.length) { st.over = true; st.winner = st.cur; return true; }
+        }
+        return false;
+      },
+    },
+    shanghai: {
+      initPlayer: (g, p) => ({ id: p.id, name: p.name, points: 0, visits: [], darts: 0 }),
+      newVisit: (st) => ({ darts: [], score: 0, target: st.round, mults: [] }),
+      dart(st, P, v, d) {
+        if (d.v > 0 && d.n === v.target) {
+          v.score += d.v; P.points += d.v; v.mults.push(d.m);
+          if ([1, 2, 3].every((m) => v.mults.includes(m))) { v.shanghai = true; st.over = true; st.winner = st.cur; return true; }
+        }
+        return false;
+      },
+      roundEnd(st) {
+        if (st.round > st.g.opts.rounds) {
+          st.round = st.g.opts.rounds;
+          st.over = true;
+          const max = Math.max(...st.players.map((p) => p.points));
+          st.winner = st.players.findIndex((p) => p.points === max);
+          st.tie = st.players.filter((p) => p.points === max).length > 1;
+        }
+      },
+    },
+  };
+
+  function endVisit(st) {
+    const T = TYPES[st.type];
+    st.visit.done = true;
+    st.visit = null;
+    if (st.over) return;
+    st.cur = (st.cur + 1) % st.players.length;
+    if (st.cur === 0) { st.round++; if (T.roundEnd) T.roundEnd(st); }
+  }
+
+  function replay(g) {
+    const T = TYPES[g.type];
+    const st = { g, type: g.type, players: g.players.map((p) => T.initPlayer(g, p)), cur: 0, visit: null, over: false, winner: null, tie: false, round: 1 };
+    for (const code of g.darts || []) {
+      if (st.over) break;
+      const d = parse(code);
+      if (!d) continue;
+      const P = st.players[st.cur];
+      if (!st.visit) { st.visit = T.newVisit(st, P); P.visits.push(st.visit); }
+      const v = st.visit;
+      v.darts.push(norm(code));
+      P.darts++;
+      const ended = T.dart(st, P, v, d);
+      if (ended || v.darts.length >= 3) endVisit(st);
+    }
+    return st;
+  }
+
+  function dartsLeft(st) {
+    return st.visit ? 3 - st.visit.darts.length : 3;
+  }
+
+  function x01Stats(g, P) {
+    const darts = P.visits.reduce((s, v) => s + (v.bust ? 3 : v.darts.length), 0);
+    const points = g.opts.start - P.rest;
+    const scores = P.visits.filter((v) => !v.bust).map((v) => v.score);
+    const co = P.visits.find((v) => v.checkout);
+    return {
+      darts,
+      points,
+      avg: darts ? (points / darts) * 3 : 0,
+      best: scores.length ? Math.max(...scores) : 0,
+      busts: P.busts,
+      checkout: co ? co.startRest : null,
+      t180: scores.filter((s) => s === 180).length,
+      t100: scores.filter((s) => s >= 100).length,
+    };
+  }
+
+  /* Finish suggestions for X01. */
+  const ALL = (() => {
+    const a = [];
+    for (let n = 20; n >= 1; n--) a.push('T' + n);
+    for (let n = 20; n >= 1; n--) a.push('D' + n);
+    for (let n = 20; n >= 1; n--) a.push(String(n));
+    a.push('25', '50');
+    return a.map((c) => ({ c, d: parse(c) }));
+  })();
+  function setupCost(d) {
+    if (d.n === 25) return d.m === 2 ? 6 : 4;
+    if (d.m === 3) return d.n === 20 ? 1 : d.n === 19 ? 1.5 : d.n >= 15 ? 2.5 : 3.5;
+    if (d.m === 2) return 5;
+    return d.n === 20 ? 0.2 : d.n >= 15 ? 0.6 : 1;
+  }
+  const DOUBLE_PREF = { 20: 0, 16: 0, 18: 0.5, 10: 0.6, 8: 0.8, 12: 0.8, 14: 1, 4: 1.2, 6: 1.3, 2: 1.5 };
+  function finCost(d, out) {
+    if (out === 'single') {
+      if (d.n === 25) return d.m === 2 ? 5 : 3;
+      return d.m === 1 ? 0 : d.m === 3 ? 2.5 : 3;
+    }
+    if (d.n === 25) return 4;
+    if (d.m === 2) return DOUBLE_PREF[d.n] ?? 1.8;
+    return d.n >= 17 ? 1 : 2;
+  }
+  function checkouts(rest, out, left, max = 3) {
+    if (rest < 1 || left < 1 || rest > 180) return [];
+    const fin = ALL.filter((x) => ruleOK(out, x.d));
+    const byVal = new Map();
+    for (const x of fin) { if (!byVal.has(x.d.v)) byVal.set(x.d.v, []); byVal.get(x.d.v).push(x); }
+    const found = [];
+    const add = (setup, f) => {
+      const cost = (setup.length + 1) * 10 + setup.reduce((s, x) => s + setupCost(x.d), 0) + finCost(f.d, out);
+      found.push({ darts: [...setup.map((x) => x.c), f.c], last: f.c, cost });
+    };
+    for (const f of byVal.get(rest) || []) add([], f);
+    if (left >= 2) {
+      for (const a of ALL) {
+        const r = rest - a.d.v;
+        if (r <= 0 || dead(out, r)) continue;
+        for (const f of byVal.get(r) || []) add([a], f);
+      }
+    }
+    if (left >= 3) {
+      for (let i = 0; i < ALL.length; i++) {
+        const a = ALL[i];
+        const r1 = rest - a.d.v;
+        if (r1 <= 0 || dead(out, r1)) continue;
+        for (let j = i; j < ALL.length; j++) {
+          const b = ALL[j];
+          const r2 = r1 - b.d.v;
+          if (r2 <= 0 || dead(out, r2)) continue;
+          for (const f of byVal.get(r2) || []) add([a, b], f);
+        }
+      }
+    }
+    found.sort((x, y) => x.cost - y.cost);
+    const key = (f) => (out === 'single' ? f.darts.slice().sort().join() : f.darts.slice(0, -1).sort().join() + '|' + f.last);
+    const uniq = [];
+    const seen = new Set();
+    for (const f of found) { const k = key(f); if (!seen.has(k)) { seen.add(k); uniq.push(f); } }
+    const pick = [];
+    const usedLast = new Set();
+    for (const f of uniq) {
+      if (pick.length >= max) break;
+      if (usedLast.has(f.last)) continue;
+      pick.push(f); usedLast.add(f.last);
+    }
+    for (const f of uniq) {
+      if (pick.length >= max) break;
+      if (!pick.includes(f)) pick.push(f);
+    }
+    return pick.map((f) => f.darts);
+  }
+
+  function modeLabel(g) {
+    if (g.type === 'x01') {
+      const parts = [String(g.opts.start)];
+      if (g.opts.in !== 'straight') parts.push(IN[g.opts.in]);
+      parts.push(OUT[g.opts.out]);
+      return parts.join(' · ');
+    }
+    if (g.type === 'atc') return 'Around the Clock' + (g.opts.bull ? ' · mit Bull' : '');
+    if (g.type === 'shanghai') return 'Shanghai · ' + g.opts.rounds + ' Runden';
+    return 'Cricket';
+  }
+
+  /* Spoken or typed German calls such as "fünf, zwanzig, triple zwanzig". Returns codes or null. */
+  const WORDS = {
+    null: 0, zero: 0, daneben: 0, vorbei: 0, miss: 0, fehlwurf: 0, out: 0, nix: 0, nichts: 0,
+    eins: 1, zwei: 2, zwo: 2, drei: 3, vier: 4, fünf: 5, fuenf: 5, sechs: 6, sieben: 7, acht: 8,
+    neun: 9, zehn: 10, elf: 11, zwölf: 12, zwoelf: 12, dreizehn: 13, vierzehn: 14, fünfzehn: 15, fuenfzehn: 15,
+    sechzehn: 16, siebzehn: 17, achtzehn: 18, neunzehn: 19, zwanzig: 20,
+    fünfundzwanzig: 25, fuenfundzwanzig: 25, fünfzig: 50, fuenfzig: 50,
+  };
+  const MULT = { triple: 3, tripel: 3, treble: 3, dreifach: 3, doppel: 2, double: 2, doppelt: 2, doppelte: 2, single: 1, einfach: 1, einfache: 1, einzel: 1 };
+  const FILLER = new Set(['und', 'äh', 'ähm', 'eh', 'hm', 'dann', 'noch', 'ich', 'hab', 'habe', 'hatte', 'geworfen', 'mal', 'die', 'ein', 'eine', 'einer', 'der', 'das', 'ne', 'n', 'also', 'so', 'pfeil', 'pfeile', 'ok', 'okay']);
+  function parseCall(text) {
+    let t = ' ' + String(text).toLowerCase()
+      .replace(/bull'?s[\s-]*eye|bullseye|bulls\s*eye|bullsai|bulsai/g, ' BE ')
+      .replace(/single[\s-]*bull|outer[\s-]*bull|bull/g, ' SB ')
+      .replace(/[.,;:!?/+–-]/g, ' ') + ' ';
+    const tokens = t.split(/\s+/).filter(Boolean);
+    const out = [];
+    let mult = 1;
+    for (const raw of tokens) {
+      const tok = raw.trim();
+      if (tok === 'BE') { out.push('50'); mult = 1; continue; }
+      if (tok === 'SB') { out.push(mult === 2 ? '50' : '25'); mult = 1; continue; }
+      const glued = /^([tds])(\d{1,2})$/.exec(tok);
+      if (glued) {
+        const c = norm((glued[1] === 's' ? '' : glued[1].toUpperCase()) + glued[2]);
+        if (!c) return null;
+        out.push(c); mult = 1; continue;
+      }
+      if (tok in MULT) { mult = MULT[tok]; continue; }
+      if (tok === 't') { mult = 3; continue; }
+      if (tok === 'd') { mult = 2; continue; }
+      let n = null;
+      if (/^\d{1,2}$/.test(tok)) n = +tok;
+      else if (tok in WORDS) n = WORDS[tok];
+      if (n !== null) {
+        if (n === 25 && mult === 1) { out.push('25'); continue; }
+        if (n === 50 && mult === 1) { out.push('50'); continue; }
+        if (n === 0) { out.push('0'); mult = 1; continue; }
+        if (n > 20) return null;
+        out.push(norm((mult === 3 ? 'T' : mult === 2 ? 'D' : '') + n));
+        mult = 1;
+        continue;
+      }
+      if (FILLER.has(tok)) continue;
+      return null;
+    }
+    if (mult !== 1) return null;
+    return out.length ? out : null;
+  }
+
+  return { CRICKET, IN, OUT, TYPE_NAMES, parse, norm, label, replay, dartsLeft, x01Stats, checkouts, modeLabel, parseCall, atcSeq };
+})();
+
+</script>
+<script>
+(() => {
+  'use strict';
+  const D = Dart;
+  const $ = (s) => document.querySelector(s);
+  const nf1 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const use = (name) => {
+    try { return window.claude && window.claude.use ? Promise.resolve(window.claude.use(name)).catch(() => null) : Promise.resolve(null); }
+    catch (e) { return Promise.resolve(null); }
+  };
+
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    if (attrs) {
+      for (const [k, v] of Object.entries(attrs)) {
+        if (v == null || v === false) continue;
+        if (k === 'class') el.className = v;
+        else if (k === 'text') el.textContent = v;
+        else if (k === 'style') Object.assign(el.style, v);
+        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+        else el.setAttribute(k, v === true ? '' : String(v));
+      }
+    }
+    for (const k of kids.flat(Infinity)) {
+      if (k == null || k === false) continue;
+      el.append(k.nodeType ? k : document.createTextNode(String(k)));
+    }
+    return el;
+  }
+
+  const S = {
+    db: null, col: null, uid: null, sample: null, mem: false, loaded: false,
+    players: [], games: [], game: null, closed: new Set(),
+    view: 'spiel', muted: false, mod: 1,
+    setup: { type: 'x01', start: 301, in: 'straight', out: 'single', bull: true, rounds: 7, sel: [] },
+    chat: [], reply: null, busy: false, confirm: null, renaming: null, open: new Set(),
+  };
+  try {
+    const m = localStorage.getItem('dart-muted');
+    if (m !== null) S.muted = m === '1';
+    const su = JSON.parse(localStorage.getItem('dart-setup') || 'null');
+    if (su && typeof su === 'object') Object.assign(S.setup, su, { sel: Array.isArray(su.sel) ? su.sel : [] });
+  } catch (e) { /* storage unavailable */ }
+  function saveSetup() { try { localStorage.setItem('dart-setup', JSON.stringify(S.setup)); } catch (e) { /* ignore */ } }
+
+  /* ---------- notes ---------- */
+  function note(text) { const n = $('#note'); n.textContent = text; n.hidden = false; }
+  function hideNote() { $('#note').hidden = true; }
+
+  /* ---------- storage ---------- */
+  const writes = new Map();
+  function persistDoc(id, data) {
+    if (!S.col) return;
+    let w = writes.get(id);
+    if (!w) { w = { busy: false, next: undefined }; writes.set(id, w); }
+    w.next = data === null ? null : clone(data);
+    if (!w.busy) flush(id, w);
+  }
+  async function flush(id, w) {
+    w.busy = true;
+    while (w.next !== undefined) {
+      const data = w.next;
+      w.next = undefined;
+      try {
+        if (data === null) await S.col.doc(id).delete();
+        else await S.col.doc(id).set(data);
+      } catch (e) {
+        note(e && e.code === 'quota_exceeded'
+          ? 'Der Speicher ist voll. Lösch ein paar alte Spiele im Verlauf, dann wird wieder gespeichert.'
+          : 'Speichern hat gerade nicht geklappt. Beim nächsten Wurf versuche ich es erneut.');
+      }
+    }
+    w.busy = false;
+  }
+  function gameData(g) { const { docId, ...data } = g; return data; }
+  function saveGame() { if (S.game) persistDoc(S.game.docId, gameData(S.game)); }
+
+  function subscribe() {
+    const timer = setTimeout(() => {
+      if (!S.loaded) note('Deine gespeicherten Spieler und Spiele sind noch nicht erreichbar. Du kannst trotzdem schon spielen.');
+    }, 10000);
+    S.col.onSnapshot((snap) => {
+      if (!snap.metadata.fromCache) { clearTimeout(timer); if (!$('#note').hidden && S.loaded === false) hideNote(); }
+      S.loaded = true;
+      const players = [];
+      const games = [];
+      let running = null;
+      for (const d of snap.docs) {
+        const x = d.data();
+        if (!x) continue;
+        if (x.kind === 'player') players.push({ id: x.id || d.id.replace(/^player-/, ''), name: String(x.name || 'Spieler'), createdAt: x.createdAt || 0 });
+        else if (x.kind === 'game' && Array.isArray(x.darts) && Array.isArray(x.players)) {
+          if (x.status === 'running') {
+            if (!S.closed.has(d.id) && (!running || (x.updatedAt || 0) > (running.data.updatedAt || 0))) running = { docId: d.id, data: x };
+          } else if (x.status === 'finished') games.push({ docId: d.id, data: x });
+        }
+      }
+      players.sort((a, b) => a.createdAt - b.createdAt);
+      games.sort((a, b) => (b.data.finishedAt || 0) - (a.data.finishedAt || 0));
+      S.players = players;
+      S.games = games;
+      if (running) {
+        if (!S.game) S.game = { ...clone(running.data), docId: running.docId };
+        else if (S.game.docId === running.docId && (running.data.updatedAt || 0) > (S.game.updatedAt || 0)) S.game = { ...clone(running.data), docId: running.docId };
+      }
+      render();
+    }, () => {
+      clearTimeout(timer);
+      S.loaded = true;
+      note('Deine gespeicherten Daten sind gerade nicht erreichbar. Neue Spiele werden eventuell nicht gespeichert.');
+      render();
+    });
+  }
+
+  /* ---------- replay cache for stored games ---------- */
+  const rcache = new WeakMap();
+  function rep(data) {
+    let r = rcache.get(data);
+    if (!r) { r = D.replay(data); rcache.set(data, r); }
+    return r;
+  }
+  function nameOf(id, fallback) { const p = S.players.find((x) => x.id === id); return p ? p.name : fallback; }
+
+  /* ---------- speech ---------- */
+  function speak(text) {
+    if (S.muted || !text || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'de-DE';
+      const v = window.speechSynthesis.getVoices().find((x) => x.lang && x.lang.toLowerCase().startsWith('de'));
+      if (v) u.voice = v;
+      u.rate = 1.05;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* speech not available */ }
+  }
+
+  /* ---------- players ---------- */
+  function addPlayer(name) {
+    const p = { id: nid(), name: name.slice(0, 24), createdAt: Date.now() };
+    S.players.push(p);
+    persistDoc('player-' + p.id, { kind: 'player', ...p });
+    return p;
+  }
+  function renamePlayer(id, name) {
+    const p = S.players.find((x) => x.id === id);
+    if (!p || !name) return;
+    p.name = name.slice(0, 24);
+    persistDoc('player-' + id, { kind: 'player', ...p });
+  }
+  function deletePlayer(id) {
+    S.players = S.players.filter((x) => x.id !== id);
+    S.setup.sel = S.setup.sel.filter((x) => x !== id);
+    saveSetup();
+    persistDoc('player-' + id, null);
+  }
+
+  /* ---------- game actions ---------- */
+  function startGame(type, opts, players) {
+    if (!players.length) return;
+    const id = nid();
+    const now = Date.now();
+    S.game = { kind: 'game', id, docId: 'game-' + id, status: 'running', type, opts, players, darts: [], createdAt: now, updatedAt: now };
+    S.mod = 1; S.confirm = null; S.reply = null; S.navOpen = false;
+    saveGame();
+    render();
+    speak(players.length > 1 ? `${players[0].name} fängt an.` : 'Los geht’s.');
+  }
+  function startFromSetup() {
+    try { startFromSetupInner(); } catch (e) { note('Das Spiel konnte nicht starten: ' + (e && e.message ? e.message : 'unbekannter Fehler') + '. Schick mir diese Meldung, dann behebe ich es.'); }
+  }
+  function startFromSetupInner() {
+    const su = S.setup;
+    const players = [...new Set(su.sel)].map((id) => S.players.find((p) => p.id === id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name }));
+    const opts = su.type === 'x01' ? { start: su.start, in: su.in, out: su.out }
+      : su.type === 'atc' ? { bull: !!su.bull }
+      : su.type === 'shanghai' ? { rounds: su.rounds } : {};
+    startGame(su.type, opts, players);
+  }
+  function rematch() {
+    const g = S.game;
+    const ps = g.players.map((p) => ({ id: p.id, name: nameOf(p.id, p.name) }));
+    const order = ps.length > 1 ? ps.slice(1).concat(ps[0]) : ps;
+    startGame(g.type, clone(g.opts), order);
+  }
+  function commit() {
+    const g = S.game;
+    g.updatedAt = Date.now();
+    const st = D.replay(g);
+    if (st.over && g.status === 'running') {
+      g.status = 'finished'; g.finishedAt = Date.now(); g.winner = st.winner;
+      if (S.mem) S.games.unshift({ docId: g.docId, data: clone(gameData(g)) });
+    } else if (!st.over && g.status === 'finished') {
+      g.status = 'running'; delete g.finishedAt; delete g.winner;
+      S.games = S.games.filter((x) => x.docId !== g.docId);
+    }
+    saveGame();
+    render();
+    return st;
+  }
+  function addDarts(codes, o = {}) {
+    const g = S.game;
+    if (!g || g.status !== 'running') return null;
+    const before = D.replay(g);
+    let added = 0;
+    for (const c of codes) {
+      const n = D.norm(c);
+      if (!n) continue;
+      g.darts.push(n); added++;
+      if (D.replay(g).over) break;
+    }
+    if (!added) return before;
+    const after = commit();
+    if (!o.quiet) announce(before, after);
+    return after;
+  }
+  function undo(n = 1) {
+    const g = S.game;
+    if (!g || !g.darts.length) return;
+    for (let i = 0; i < n && g.darts.length; i++) g.darts.pop();
+    commit();
+  }
+  function endVisitEarly() {
+    const st = D.replay(S.game);
+    if (st.over) return;
+    addDarts(Array(D.dartsLeft(st)).fill('0'));
+  }
+  function abandon() {
+    const g = S.game;
+    if (!g) return;
+    S.closed.add(g.docId);
+    persistDoc(g.docId, null);
+    S.game = null; S.confirm = null; S.reply = null;
+    render();
+  }
+  function newGame() { S.game = null; S.confirm = null; S.reply = null; render(); }
+
+  function announce(b, a) {
+    const g = S.game;
+    const multi = g.players.length > 1;
+    const P = a.players[b.cur];
+    const v = P.visits[P.visits.length - 1];
+    if (!v || !v.done) return;
+    let t = '';
+    if (g.type === 'x01') {
+      if (v.bust) t = `Überworfen. Rest ${P.rest}.`;
+      else if (v.checkout) t = multi ? `Gecheckt! ${P.name} gewinnt.` : `Gecheckt! ${P.darts} Pfeile.`;
+      else t = `${v.score}. Rest ${P.rest}.`;
+    } else if (g.type === 'cricket') {
+      t = a.over ? `${P.name} gewinnt.` : v.marks ? `${v.marks} ${v.marks === 1 ? 'Mark' : 'Marks'}.` : 'Keine Marks.';
+    } else if (g.type === 'atc') {
+      const seq = D.atcSeq(g);
+      t = a.over ? (multi ? `${P.name} gewinnt.` : 'Geschafft!') : `Nächstes Ziel ${D.label(String(seq[P.idx]))}.`;
+    } else if (g.type === 'shanghai') {
+      if (v.shanghai) t = `Shanghai! ${P.name} gewinnt.`;
+      else if (a.over) t = a.tie ? 'Unentschieden.' : `${a.players[a.winner].name} gewinnt mit ${a.players[a.winner].points} Punkten.`;
+      else t = `${v.score} Punkte.`;
+    }
+    if (multi && !(v.checkout || a.over)) t = `${P.name}: ${t}`;
+    if (multi && !a.over) t += ` ${a.players[a.cur].name} ist dran.`;
+    speak(t);
+  }
+
+  /* ---------- Claude ---------- */
+  const INSTR = [
+    'Du bist Claude und hilfst Nikolas in seiner Dart-App beim Zählen. Deine Antwort wird angezeigt und vorgelesen:',
+    'antworte auf Deutsch, kurz (höchstens zwei Sätze), ohne Listen, Markdown oder Emojis.',
+    'Sagt er Würfe an, trag sie mit wuerfe_eintragen in Wurfreihenfolge ein. Codes: "20" Single, "D16" Doppel, "T20" Triple,',
+    '"25" Bull (grüner Ring), "50" Bullseye (rote Mitte), "0" daneben. Nenn danach Punkte der Aufnahme und den Stand, wie das Werkzeug ihn liefert.',
+    'Ist eine Ansage mehrdeutig (z. B. "1970"), nimm die plausibelste Aufteilung in höchstens so viele Pfeile, wie in der Aufnahme übrig sind, und sag kurz, wie du es verstanden hast.',
+    'Will er etwas korrigieren, nimm mit letzte_wuerfe_loeschen die falschen Pfeile zurück und trag die richtigen ein.',
+    'Für Finish-Wege ruf finish_vorschlaege auf, statt selbst zu rechnen.',
+    'Regeln: Single Out = jedes Feld zum Ausmachen, Double Out = nur Doppel oder Bullseye, Triple Out = nur Triple, Master Out = Doppel, Triple oder Bullseye.',
+    'Überworfen heißt: die Aufnahme zählt nicht und der Rest bleibt wie vor der Aufnahme. Die App rechnet das selbst.',
+    'Stell keine Rückfragen, wenn eine vernünftige Annahme möglich ist.',
+  ].join(' ');
+
+  function standOf(g, st, P) {
+    if (g.type === 'x01') {
+      const s = D.x01Stats(g, P);
+      return { name: P.name, rest: P.rest, eingestiegen: P.opened, schnitt: Math.round(s.avg * 10) / 10, pfeile: s.darts,
+        letzteAufnahmen: P.visits.slice(-3).map((v) => ({ wuerfe: v.darts, punkte: v.score, ueberworfen: v.bust })) };
+    }
+    if (g.type === 'cricket') return { name: P.name, punkte: P.points, marks: P.marks };
+    if (g.type === 'atc') { const seq = D.atcSeq(g); return { name: P.name, naechstesZiel: seq[P.idx] ?? 'fertig', treffer: P.hits, pfeile: P.darts }; }
+    return { name: P.name, punkte: P.points };
+  }
+  function gameSummary() {
+    const g = S.game;
+    if (!g) return null;
+    const st = D.replay(g);
+    return {
+      modus: D.modeLabel(g), art: g.type, runde: st.round, vorbei: st.over,
+      sieger: st.winner != null && !st.tie ? st.players[st.winner].name : null,
+      amZug: st.over ? null : st.players[st.cur].name,
+      pfeileUebrigInAufnahme: st.over ? 0 : D.dartsLeft(st),
+      aktuelleAufnahme: st.visit ? st.visit.darts : [],
+      stand: st.players.map((P) => standOf(g, st, P)),
+    };
+  }
+  function context() {
+    return JSON.stringify({
+      spieler: S.players.map((p) => { const s = playerStats(p.id); return { name: p.name, spiele: s.games, siege: s.wins, schnittX01: s.darts ? Math.round(s.avg * 10) / 10 : null, besterWurf: s.best || null, hoechstesFinish: s.co || null, ueberworfenProSpiel: s.x01 ? Math.round((s.busts / s.x01) * 100) / 100 : null }; }),
+      spiel: gameSummary(),
+    });
+  }
+  const TOOLS = [
+    {
+      name: 'wuerfe_eintragen',
+      description: 'Trägt geworfene Pfeile für den Spieler am Zug ein, in Wurfreihenfolge. Codes: "20" Single, "D16" Doppel, "T20" Triple, "25" Bull, "50" Bullseye, "0" daneben. Nach drei Pfeilen, beim Überwerfen oder Checken wechselt die App automatisch zum nächsten Spieler. Gibt den neuen Stand zurück.',
+      inputSchema: { type: 'object', properties: { darts: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 9 } }, required: ['darts'] },
+      execute: ({ darts }) => {
+        if (!S.game || S.game.status !== 'running') throw new Error('Es läuft gerade kein Spiel.');
+        const codes = (darts || []).map((c) => D.norm(c));
+        if (!codes.length || codes.some((c) => !c)) throw new Error('Ungültiger Code. Erlaubt sind 0 bis 20, D1 bis D20, T1 bis T20, 25 und 50.');
+        const g = S.game;
+        const before = D.replay(g);
+        const who = before.players[before.cur].name;
+        addDarts(codes, { quiet: true });
+        const st = D.replay(g);
+        const P = st.players[before.cur];
+        const v = P.visits[P.visits.length - 1];
+        return { eingetragenFuer: who, letzteAufnahme: v ? { wuerfe: v.darts, punkte: v.score ?? null, ueberworfen: !!v.bust, fertig: !!v.done } : null, stand: gameSummary() };
+      },
+    },
+    {
+      name: 'letzte_wuerfe_loeschen',
+      description: 'Nimmt die zuletzt eingetragenen Pfeile zurück (Standard: einen).',
+      inputSchema: { type: 'object', properties: { anzahl: { type: 'integer', minimum: 1, maximum: 9 } } },
+      execute: ({ anzahl }) => {
+        if (!S.game) throw new Error('Es läuft gerade kein Spiel.');
+        undo(anzahl || 1);
+        return { stand: gameSummary() };
+      },
+    },
+    {
+      name: 'finish_vorschlaege',
+      description: 'Rechnet bis zu drei Finish-Wege für einen Rest nach dem Out-Modus des laufenden X01-Spiels aus (ohne Spiel: Single Out).',
+      inputSchema: { type: 'object', properties: { rest: { type: 'integer', minimum: 1 }, pfeile: { type: 'integer', minimum: 1, maximum: 3 } }, required: ['rest'] },
+      execute: ({ rest, pfeile }) => {
+        const out = S.game && S.game.type === 'x01' ? S.game.opts.out : 'single';
+        const combos = D.checkouts(rest, out, pfeile || 3);
+        return { modus: D.OUT[out], vorschlaege: combos.map((c) => c.map(D.label).join(' + ')), checkbar: combos.length > 0 };
+      },
+    },
+  ];
+  function setReply(r) { S.reply = r; renderReply(); }
+  async function askClaude(text) {
+    if (!S.sample) {
+      setReply({ text: 'Ich bin hier gerade nicht erreichbar. Würfe kannst du über die Tasten eintragen.' });
+      return;
+    }
+    if (S.busy) return;
+    S.busy = true;
+    const hist = S.chat.slice(-8);
+    while (hist.length && hist[0].role !== 'user') hist.shift();
+    const msgs = [...hist, { role: 'user', content: `${INSTR}\n\n<stand>\n${context()}\n</stand>\n\nAnsage oder Frage: ${text}` }];
+    setReply({ text: 'Denkt nach …', pending: true });
+    try {
+      const res = await S.sample(msgs, {
+        tools: TOOLS, cache: false,
+        onText: ({ text: t }) => { if (t) { S.reply = { text: t, pending: true }; renderReply(); } },
+      });
+      const answer = (res && res.text ? res.text : '').trim() || 'Erledigt.';
+      S.chat.push({ role: 'user', content: text }, { role: 'assistant', content: answer });
+      if (S.chat.length > 16) S.chat = S.chat.slice(-16);
+      setReply({ text: answer });
+      speak(answer);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'not_granted') S.sample = null;
+      setReply({ text: code === 'not_granted' ? 'Ohne deine Freigabe kann ich hier nicht antworten. Würfe gehen weiter über die Tasten.'
+        : code === 'rate_limited' ? 'Gerade kamen zu viele Anfragen. Versuch es in einer Minute nochmal.'
+        : 'Das hat nicht geklappt. Versuch es nochmal oder trag die Würfe über die Tasten ein.' });
+    } finally {
+      S.busy = false;
+    }
+  }
+  function submitCall(raw) {
+    const text = raw.trim();
+    if (!text) return;
+    const low = text.toLowerCase().replace(/[.!]/g, '').trim();
+    if (S.game && S.game.status === 'running') {
+      if (/^(rückgängig|zurück|undo|letzten (wurf|pfeil) (löschen|zurück))$/.test(low)) { undo(); return; }
+      const codes = D.parseCall(text);
+      if (codes && codes.length <= D.dartsLeft(D.replay(S.game))) { setReply(null); addDarts(codes); return; }
+    }
+    askClaude(text);
+  }
+
+  /* ---------- statistics ---------- */
+  function playerStats(pid) {
+    const s = { games: 0, wins: 0, x01: 0, points: 0, darts: 0, best: 0, co: 0, busts: 0, avgs: [] };
+    const list = S.games.slice().sort((a, b) => (a.data.finishedAt || 0) - (b.data.finishedAt || 0));
+    for (const { data: g } of list) {
+      const i = g.players.findIndex((p) => p.id === pid);
+      if (i < 0) continue;
+      const st = rep(g);
+      s.games++;
+      if (st.winner === i && !st.tie) s.wins++;
+      if (g.type === 'x01') {
+        const x = D.x01Stats(g, st.players[i]);
+        s.x01++; s.points += x.points; s.darts += x.darts; s.busts += x.busts;
+        s.best = Math.max(s.best, x.best);
+        if (x.checkout) s.co = Math.max(s.co, x.checkout);
+        s.avgs.push(x.avg);
+      }
+    }
+    s.avg = s.darts ? (s.points / s.darts) * 3 : 0;
+    return s;
+  }
+
+  /* ---------- rendering ---------- */
+  function render() {
+    const ae = document.activeElement;
+    const fid = ae && ae.id && ae !== document.body ? ae.id : null;
+    const val = fid && 'value' in ae ? ae.value : null;
+    $$('.tabs a').forEach((a) => { if (a.dataset.view === S.view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    ['spiel', 'spieler', 'verlauf'].forEach((v) => { $('#view-' + v).hidden = v !== S.view; });
+    const inGame = S.view === 'spiel' && S.game && S.game.status === 'running';
+    $('.top').hidden = !!inGame && !S.navOpen;
+    const sp = $('#speaker');
+    sp.setAttribute('aria-pressed', String(!S.muted));
+    sp.setAttribute('title', S.muted ? 'Ton ist aus' : 'Ton ist an');
+    if (S.view === 'spiel') renderGameView();
+    else if (S.view === 'spieler') $('#view-spieler').replaceChildren(...buildPlayers());
+    else $('#view-verlauf').replaceChildren(...buildHistory());
+    if (fid && fid !== 'call') {
+      const el = document.getElementById(fid);
+      if (el && el !== ae) { if (val != null && 'value' in el) el.value = val; try { el.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    }
+  }
+  function $$(s) { return Array.from(document.querySelectorAll(s)); }
+
+  function renderGameView() {
+    const setupEl = $('#setup');
+    const board = $('#board');
+    const pad = $('#pad');
+    if (!S.game) {
+      setupEl.hidden = false; board.hidden = true; pad.hidden = true;
+      setupEl.replaceChildren(...buildSetup());
+    } else {
+      setupEl.hidden = true; board.hidden = false;
+      const st = D.replay(S.game);
+      board.replaceChildren(...buildBoard(st).filter(Boolean));
+      pad.hidden = st.over;
+      syncPad();
+    }
+    renderReply();
+  }
+  function renderReply() {
+    const r = $('#reply');
+    if (!S.reply) { r.hidden = true; return; }
+    r.hidden = false;
+    r.classList.toggle('pending', !!S.reply.pending);
+    $('#reply-txt').textContent = S.reply.text;
+  }
+  function syncPad() {
+    const pad = $('#pad');
+    pad.dataset.mod = String(S.mod);
+    pad.querySelectorAll('[data-mod]').forEach((b) => { if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(+b.dataset.mod === S.mod)); });
+  }
+
+  const IN_HELP = { straight: 'Jeder Pfeil zählt sofort.', double: 'Punkte zählen erst ab dem ersten Doppel.', triple: 'Punkte zählen erst ab dem ersten Triple.', master: 'Punkte zählen erst ab dem ersten Doppel oder Triple.' };
+  const OUT_HELP = { single: 'Ausmachen mit jedem Feld.', double: 'Der letzte Pfeil muss ein Doppel oder Bullseye sein.', triple: 'Der letzte Pfeil muss ein Triple sein.', master: 'Der letzte Pfeil muss ein Doppel, Triple oder Bullseye sein.' };
+
+  function seg(key, options, cur) {
+    return h('div', { class: 'seg', role: 'group' }, options.map(([val, lab]) => h('button', {
+      type: 'button', 'aria-pressed': String(cur === val),
+      onclick: () => { S.setup[key] = val; saveSetup(); render(); },
+    }, lab)));
+  }
+  function field(label, ...kids) { return h('div', { class: 'field' }, h('span', { class: 'lab' }, label), ...kids); }
+
+  function addPlayerForm(inputId, select) {
+    return h('form', {
+      class: 'row', autocomplete: 'off',
+      onsubmit: (e) => {
+        e.preventDefault();
+        const inp = e.target.querySelector('input');
+        const name = inp.value.trim();
+        if (!name) return;
+        const p = addPlayer(name);
+        if (select && !S.setup.sel.includes(p.id)) { S.setup.sel.push(p.id); saveSetup(); }
+        inp.value = '';
+        render();
+      },
+    },
+    h('label', { class: 'sr', for: inputId }, 'Name des neuen Spielers'),
+    h('input', { id: inputId, type: 'text', placeholder: 'Name des neuen Spielers', maxlength: '24' }),
+    h('button', { class: 'btn', type: 'submit' }, 'Anlegen'));
+  }
+
+  function buildSetup() {
+    const su = S.setup;
+    su.sel = su.sel.filter((id) => S.players.some((p) => p.id === id));
+    if (!su.sel.length && S.players.length && !S.deselected) { su.sel = [S.players[0].id]; saveSetup(); }
+    const out = [h('h2', { class: 'h' }, 'Neues Spiel')];
+    out.push(field('Spielart', seg('type', [['x01', 'X01'], ['cricket', 'Cricket'], ['atc', 'Around the Clock'], ['shanghai', 'Shanghai']], su.type)));
+    if (su.type === 'x01') {
+      out.push(field('Startpunkte', seg('start', [[301, '301'], [501, '501'], [701, '701']], su.start)));
+      out.push(field('Einstieg', seg('in', [['straight', 'Straight'], ['double', 'Double'], ['triple', 'Triple'], ['master', 'Master']], su.in), h('p', { class: 'help' }, IN_HELP[su.in])));
+      out.push(field('Finish', seg('out', [['single', 'Single'], ['double', 'Double'], ['triple', 'Triple'], ['master', 'Master']], su.out), h('p', { class: 'help' }, OUT_HELP[su.out])));
+    } else if (su.type === 'cricket') {
+      out.push(h('p', { class: 'help' }, 'Schließ die 15 bis 20 und das Bull mit je drei Treffern (Doppel zählt zwei, Triple drei). Danach punktest du auf dem Feld, solange es ein anderer noch offen hat.'));
+    } else if (su.type === 'atc') {
+      out.push(field('Ende', seg('bull', [[true, 'Mit Bull'], [false, 'Ohne Bull']], su.bull), h('p', { class: 'help' }, 'Triff die 1 bis 20 der Reihe nach. Jeder Ring zählt.')));
+    } else {
+      out.push(field('Runden', seg('rounds', [[7, '7'], [10, '10'], [20, '20']], su.rounds), h('p', { class: 'help' }, 'In Runde 1 zählt nur die 1, in Runde 2 nur die 2 und so weiter. Single, Doppel und Triple derselben Zahl in einer Aufnahme gewinnen sofort.')));
+    }
+    const chips = S.players.map((p) => {
+      const i = su.sel.indexOf(p.id);
+      return h('button', {
+        type: 'button', class: 'chip', 'aria-pressed': String(i >= 0),
+        onclick: () => { if (i >= 0) { su.sel.splice(i, 1); S.deselected = true; } else if (!su.sel.includes(p.id)) su.sel.push(p.id); S.startHint = false; saveSetup(); render(); },
+      }, i >= 0 ? h('span', { class: 'ord', 'aria-label': `Wirft als ${i + 1}.` }, String(i + 1)) : null, p.name);
+    });
+    out.push(field('Spieler',
+      chips.length ? h('p', { class: 'help' }, 'Tipp auf die Namen, die mitspielen. Die Zahl zeigt die Wurfreihenfolge.') : null,
+      chips.length ? h('div', { class: 'chips' }, chips) : h('p', { class: 'help' }, S.loaded ? 'Leg zuerst einen Spieler an.' : 'Spieler werden geladen …'),
+      addPlayerForm('new-player', true),
+      null));
+    if (S.startHint && !su.sel.length) out.push(h('p', { class: 'note', role: 'alert' }, S.players.length ? 'Tipp oben auf mindestens einen Namen, dann kannst du starten.' : 'Leg zuerst oben einen Spieler mit Namen an.'));
+    out.push(h('button', {
+      class: 'btn primary wide', type: 'button',
+      onclick: () => { if (!su.sel.length) { S.startHint = true; render(); return; } startFromSetup(); },
+    }, su.sel.length > 1 ? `Spiel starten · ${su.sel.length} Spieler` : su.sel.length === 1 ? `Spiel starten · ${nameOf(su.sel[0], 'Spieler')}` : 'Spiel starten'));
+    return out;
+  }
+
+  function comboNodes(c) {
+    return c.map((code, i) => [i ? ' + ' : '', h('span', { class: code.startsWith('T') ? 't' : (code.startsWith('D') || code === '50') ? 'd' : '' }, D.label(code))]);
+  }
+  function lastDone(P) { for (let i = P.visits.length - 1; i >= 0; i--) if (P.visits[i].done) return P.visits[i]; return null; }
+
+  function buildBoard(st) {
+    const g = S.game;
+    const out = [];
+    const roundTxt = g.type === 'shanghai' ? `Runde ${st.round} von ${g.opts.rounds} · Ziel ${st.round}` : `Runde ${st.round}`;
+    const quit = st.over ? null : S.confirm === 'quit'
+      ? h('div', { class: 'actions' },
+        h('button', { class: 'btn slim danger', type: 'button', onclick: abandon }, 'Spiel verwerfen'),
+        h('button', { class: 'btn slim ghost', type: 'button', onclick: () => { S.confirm = null; render(); } }, 'Weiter spielen'))
+      : h('button', { class: 'btn slim ghost', type: 'button', onclick: () => { S.confirm = 'quit'; render(); } }, 'Abbrechen');
+    const menu = st.over ? null : h('button', {
+      type: 'button', class: 'menubtn', 'aria-expanded': String(!!S.navOpen), 'aria-label': S.navOpen ? 'Menü ausblenden' : 'Menü einblenden',
+      onclick: () => { S.navOpen = !S.navOpen; render(); },
+    }, h('span', { class: 'bars', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')));
+    out.push(h('div', { class: 'ghead' }, menu, h('div', { class: 'gtitle' }, h('div', { class: 'mode' }, D.modeLabel(g)), h('div', { class: 'small muted' }, st.over ? 'Spiel beendet' : roundTxt)), quit));
+
+    if (g.type === 'x01') out.push(...boardX01(st));
+    else if (g.type === 'cricket') out.push(boardCricket(st));
+    else if (g.type === 'atc') out.push(...boardAtc(st));
+    else out.push(...boardShanghai(st));
+
+    if (!st.over) {
+      const heroCard = out.find((el) => el && el.classList && el.classList.contains('hero'));
+      const slotBox = heroCard && heroCard.querySelector ? heroCard.querySelector('.hslots') : null;
+      if (g.type !== 'cricket' && slotBox) slotBox.append(visitStrip(st, true, true));
+      else out.push(visitStrip(st));
+      if (g.type === 'x01') {
+        const P = st.players[st.cur];
+        if (P.opened && P.rest <= 180) {
+          const left = D.dartsLeft(st);
+          out.push(coBox(P.rest, D.checkouts(P.rest, g.opts.out, left), left));
+        }
+      }
+    } else out.push(overPanel(st));
+    return out;
+  }
+
+  function others(st, val, meta) {
+    if (st.players.length < 2) return null;
+    const n = st.players.length;
+    const idx = st.over ? st.players.map((_, i) => i) : Array.from({ length: n - 1 }, (_, k) => (st.cur + 1 + k) % n);
+    return h('div', { class: 'olist', 'aria-label': st.over ? 'Stand aller Spieler' : 'Die anderen Spieler' }, idx.map((i) => {
+      const P = st.players[i];
+      return h('div', { class: 'orow' + (st.over && st.winner === i && !st.tie ? ' win' : '') },
+        h('div', { class: 'oleft' }, h('span', { class: 'on' }, P.name), meta ? h('span', { class: 'om' }, meta(P)) : null),
+        h('span', { class: 'ov' }, val(P)));
+    }));
+  }
+  function hero(st, P, unit, value, meta, extra, stats) {
+    return h('div', { class: 'pcard cur hero' },
+      h('div', { class: 'hrow1' },
+        h('div', { class: 'pname' }, P.name, extra || null),
+        stats ? h('div', { class: 'hstats' }, stats.map(([k, v]) => h('div', null, h('span', { class: 'sk' }, k), h('span', { class: 'sv' }, v)))) : null),
+      meta ? h('div', { class: 'pmeta' }, meta) : null,
+      h('div', { class: 'hrow3' },
+        h('div', { class: 'hslots' }),
+        h('div', { class: 'hrest' }, h('span', { class: 'unit' }, unit), h('span', { class: 'num' }, value))));
+  }
+  function boardX01(st) {
+    const g = S.game;
+    const out = [];
+    const rest = others(st, (P) => String(P.rest), (P) => `Ø ${nf1.format(D.x01Stats(g, P).avg)} · ` + ((P) => { const l = lastDone(P); return l ? `Last: ${l.bust ? 'überworfen' : l.score} (${l.darts.map(D.label).join(', ')})` : 'noch kein Wurf'; })(P));
+    if (!st.over) {
+      const P = st.players[st.cur];
+      const s = D.x01Stats(g, P);
+      const last = lastDone(P);
+      const pill = !P.opened ? h('span', { class: 'pill warn' }, g.opts.in === 'double' ? 'braucht Doppel' : g.opts.in === 'triple' ? 'braucht Triple' : 'braucht Doppel/Triple') : null;
+      out.push(hero(st, P, 'Rest', String(P.rest), last ? `Last: ${last.bust ? 'überworfen' : last.score} (${last.darts.map(D.label).join(', ')})` : null, pill,
+        [['3-Dart-Ø', nf1.format(s.avg)], ['Bester Wurf', s.best ? String(s.best) : '–'], ['Pfeile', String(s.darts)]]));
+    }
+    out.push(rest);
+    return out;
+  }
+  function boardCricket(st) {
+    const glyph = (m) => (m >= 3 ? '●' : m === 2 ? 'X' : m === 1 ? '/' : '');
+    return h('div', { class: 'scroll-x' }, h('table', { class: 'cric' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, h('span', { class: 'sr' }, 'Feld')), st.players.map((P, i) => h('th', { scope: 'col', class: i === st.cur && !st.over ? 'cur' : null }, P.name)))),
+      h('tbody', null, D.CRICKET.map((t) => {
+        const dead = st.players.every((P) => P.marks[t] >= 3);
+        return h('tr', { class: dead ? 'dead' : null }, h('th', { scope: 'row' }, t === 25 ? 'Bull' : String(t)),
+          st.players.map((P) => h('td', { class: 'm' + Math.min(3, P.marks[t]), 'aria-label': `${P.marks[t]} von 3` }, glyph(P.marks[t]))));
+      })),
+      h('tfoot', null, h('tr', null, h('th', { scope: 'row' }, 'Punkte'), st.players.map((P) => h('td', null, String(P.points)))))));
+  }
+  function boardAtc(st) {
+    const g = S.game;
+    const seq = D.atcSeq(g);
+    const tgt = (P) => (P.idx >= seq.length ? 'Fertig' : D.label(String(seq[P.idx])));
+    const out = [];
+    const rest = others(st, tgt, (P) => `${P.idx} von ${seq.length} geschafft`);
+    if (!st.over) {
+      const P = st.players[st.cur];
+      const card = hero(st, P, 'Ziel', tgt(P), `${P.idx} von ${seq.length} · ${P.hits} Treffer mit ${P.darts} Pfeilen`);
+      card.append(h('div', { class: 'bar', role: 'img', 'aria-label': `${P.idx} von ${seq.length} geschafft` }, h('i', { style: { width: `${(P.idx / seq.length) * 100}%` } })));
+      out.push(card);
+    }
+    out.push(rest);
+    return out;
+  }
+  function boardShanghai(st) {
+    const out = [];
+    const rest = others(st, (P) => String(P.points), (P) => { const l = lastDone(P); return l ? `zuletzt ${l.score} auf die ${l.target}` : 'noch kein Wurf'; });
+    if (!st.over) {
+      const P = st.players[st.cur];
+      const last = lastDone(P);
+      out.push(hero(st, P, 'Punkte', String(P.points), last ? `zuletzt ${last.score} auf die ${last.target}` : `Ziel in dieser Runde: ${st.round}`));
+    }
+    out.push(rest);
+    return out;
+  }
+
+  function visitStrip(st, bare, noSum) {
+    const g = S.game;
+    const v = st.visit;
+    const darts = v ? v.darts : [];
+    const slots = [0, 1, 2].map((i) => h('div', { class: 'slot' + (darts[i] ? ' filled' : i === darts.length ? ' next' : '') },
+      darts[i] ? h('span', { class: darts[i].startsWith('T') ? 't' : (darts[i].startsWith('D') || darts[i] === '50') ? 'd' : '' }, D.label(darts[i])) : h('span', { class: 'sr' }, `Pfeil ${i + 1} offen`)));
+    let sum = '';
+    if (v) {
+      if (g.type === 'x01') sum = String(v.score);
+      else if (g.type === 'cricket') sum = `${v.marks} M`;
+      else if (g.type === 'atc') sum = `${v.hits} ✓`;
+      else sum = String(v.score);
+    }
+    const grid = h('div', { class: 'visit' + (noSum ? ' nosum' : ''), 'aria-label': 'Aktuelle Aufnahme' }, slots, noSum ? null : h('div', { class: 'vsum' }, sum));
+    if (bare) return grid;
+    const who = st.players.length > 1 ? `${st.players[st.cur].name} wirft` : null;
+    return h('div', { class: 'field' }, who ? h('span', { class: 'lab' }, who) : null, grid);
+  }
+
+  function coBox(rest, combos, left) {
+    const rows = combos.length ? combos : [null];
+    const mid = Math.floor((rows.length - 1) / 2);
+    const box = h('div', { class: 'co', 'aria-label': 'Finish-Vorschläge' });
+    rows.forEach((c, i) => {
+      box.append(h('div', { class: 'co-line', style: { gridRow: String(i + 1) } },
+        c ? comboNodes(c) : h('span', { class: 'muted' }, `Mit ${left} ${left === 1 ? 'Pfeil' : 'Pfeilen'} nicht zu checken`)));
+    });
+    box.append(h('div', { class: 'co-rest', style: { gridRow: String(mid + 1) } }, 'Rest ', h('b', null, String(rest))));
+    return box;
+  }
+
+  function statRows(g, st) {
+    if (g.type === 'x01') {
+      return [['Spieler', '3-Dart-Ø', 'Pfeile', 'Bester Wurf', 'Finish', 'Überworfen'],
+        ...st.players.map((P) => { const s = D.x01Stats(g, P); return [P.name, nf1.format(s.avg), s.darts, s.best, s.checkout ?? '–', s.busts]; })];
+    }
+    if (g.type === 'cricket') {
+      return [['Spieler', 'Punkte', 'Marks/Runde', 'Pfeile'],
+        ...st.players.map((P) => { const marks = P.visits.reduce((a, v) => a + v.marks, 0); return [P.name, P.points, nf1.format(P.visits.length ? marks / P.visits.length : 0), P.darts]; })];
+    }
+    if (g.type === 'atc') return [['Spieler', 'Geschafft', 'Treffer', 'Pfeile'], ...st.players.map((P) => [P.name, `${P.idx}/${D.atcSeq(g).length}`, P.hits, P.darts])];
+    return [['Spieler', 'Punkte', 'Pfeile'], ...st.players.map((P) => [P.name, P.points, P.darts])];
+  }
+  function statTable(rows) {
+    return h('div', { class: 'scroll-x' }, h('table', { class: 'stats' },
+      h('thead', null, h('tr', null, rows[0].map((c) => h('th', { scope: 'col' }, c)))),
+      h('tbody', null, rows.slice(1).map((r) => h('tr', null, r.map((c) => h('td', null, String(c))))))));
+  }
+  function overPanel(st) {
+    const g = S.game;
+    const W = st.winner != null ? st.players[st.winner] : null;
+    let title;
+    if (st.tie) title = 'Unentschieden';
+    else if (g.players.length > 1) title = `${W.name} gewinnt`;
+    else if (g.type === 'x01') title = `Gecheckt in ${D.x01Stats(g, W).darts} Pfeilen`;
+    else if (g.type === 'shanghai') title = W && lastDone(W) && lastDone(W).shanghai ? 'Shanghai!' : `${W.points} Punkte`;
+    else if (g.type === 'cricket') title = `Alles zu in ${W.darts} Pfeilen`;
+    else title = `Geschafft in ${W.darts} Pfeilen`;
+    return h('div', { class: 'over' }, h('h3', null, title), statTable(statRows(g, st)),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn primary', type: 'button', onclick: rematch }, 'Revanche'),
+        h('button', { class: 'btn', type: 'button', onclick: newGame }, 'Neues Spiel'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => undo() }, 'Letzten Wurf zurück')));
+  }
+
+  function sparkline(vals) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 300 44'); svg.setAttribute('class', 'spark'); svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Schnitt der letzten X01-Spiele: ' + vals.map((v) => nf1.format(v)).join(', '));
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = hi - lo || 1;
+    const pts = vals.map((v, i) => [vals.length === 1 ? 150 : 6 + (i * 288) / (vals.length - 1), 38 - ((v - lo) / span) * 30]);
+    const mk = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
+    svg.append(mk('line', { x1: 0, x2: 300, y1: 38, y2: 38, stroke: '#353b33', 'stroke-width': 1 }));
+    svg.append(mk('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', stroke: '#efe6cf', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }));
+    const e = pts[pts.length - 1];
+    svg.append(mk('circle', { cx: e[0], cy: e[1], r: 4, fill: '#d42b40' }));
+    return svg;
+  }
+
+  function exportText() {
+    const docs = {};
+    for (const p of S.players) docs['player-' + p.id] = { kind: 'player', id: p.id, name: p.name, createdAt: p.createdAt || 0 };
+    for (const { docId, data } of S.games) docs[docId] = data;
+    return 'DART1:' + btoa(unescape(encodeURIComponent(JSON.stringify(docs))));
+  }
+  function importText(txt) {
+    const raw = String(txt || '').trim().replace(/^DART1:/, '');
+    let docs;
+    try { docs = JSON.parse(decodeURIComponent(escape(atob(raw)))); } catch (e) { return 'Der Code ist unvollständig oder falsch kopiert. Kopier ihn bitte nochmal komplett.'; }
+    let np = 0, ng = 0;
+    for (const [id, d] of Object.entries(docs || {})) {
+      if (!d || typeof d !== 'object' || !/^(player|game)-[\w.-]+$/.test(id)) continue;
+      if (d.kind === 'player' && typeof d.name === 'string') {
+        if (!S.players.some((p) => p.id === d.id)) S.players.push({ id: d.id, name: d.name.slice(0, 24), createdAt: d.createdAt || 0 });
+        persistDoc(id, { kind: 'player', id: d.id, name: d.name.slice(0, 24), createdAt: d.createdAt || 0 }); np++;
+      } else if (d.kind === 'game' && d.status === 'finished' && Array.isArray(d.darts) && Array.isArray(d.players)) {
+        if (!S.games.some((g) => g.docId === id)) S.games.push({ docId: id, data: d });
+        persistDoc(id, d); ng++;
+      }
+    }
+    S.games.sort((a, b) => (b.data.finishedAt || 0) - (a.data.finishedAt || 0));
+    return `Übernommen: ${np} Spieler und ${ng} Spiele.`;
+  }
+  function dataCard() {
+    const msg = S.dataMsg ? h('p', { class: 'help', role: 'status' }, S.dataMsg) : null;
+    return h('div', { class: 'card' },
+      h('h3', null, 'Daten übertragen'),
+      h('p', { class: 'help' }, 'Kopier hier alle Spieler und Spiele als Code und füg ihn in der App auf einem anderen Gerät ein.'),
+      h('button', {
+        class: 'btn', type: 'button',
+        onclick: async () => {
+          const t = exportText();
+          try { await navigator.clipboard.writeText(t); S.dataMsg = 'Code kopiert. Füg ihn auf dem anderen Gerät unten bei „Code einfügen“ ein.'; S.showCode = null; }
+          catch (e) { S.dataMsg = 'Kopieren ging nicht automatisch. Markier den Code unten und kopier ihn selbst.'; S.showCode = t; }
+          render();
+        },
+      }, 'Alle Daten als Code kopieren'),
+      S.showCode ? h('textarea', { id: 'export-code', class: 'code', readonly: true, rows: '4' }, S.showCode) : null,
+      h('form', {
+        class: 'row', autocomplete: 'off',
+        onsubmit: (e) => { e.preventDefault(); const inp = e.target.querySelector('input'); S.dataMsg = importText(inp.value); inp.value = ''; render(); },
+      }, h('label', { class: 'sr', for: 'import-code' }, 'Code einfügen'),
+      h('input', { id: 'import-code', type: 'text', placeholder: 'Code einfügen' }),
+      h('button', { class: 'btn', type: 'submit' }, 'Übernehmen')),
+      msg);
+  }
+  function buildPlayers() {
+    const out = [h('h2', { class: 'h' }, 'Spieler'), addPlayerForm('new-player-2', false)];
+    if (!S.players.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine Spieler. Leg oben den ersten an.' : 'Spieler werden geladen …'), dataCard()); return out; }
+    for (const p of S.players) {
+      const s = playerStats(p.id);
+      let head;
+      if (S.renaming === p.id) {
+        head = h('form', {
+          class: 'row', autocomplete: 'off',
+          onsubmit: (e) => { e.preventDefault(); renamePlayer(p.id, e.target.querySelector('input').value.trim()); S.renaming = null; render(); },
+        }, h('label', { class: 'sr', for: 'rename-' + p.id }, 'Neuer Name'),
+        h('input', { id: 'rename-' + p.id, type: 'text', value: p.name, maxlength: '24' }),
+        h('button', { class: 'btn', type: 'submit' }, 'Speichern'),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => { S.renaming = null; render(); } }, 'Abbrechen'));
+      } else {
+        const del = S.confirm === 'del-' + p.id
+          ? h('button', { class: 'btn slim danger', type: 'button', onclick: () => { deletePlayer(p.id); S.confirm = null; render(); } }, 'Wirklich löschen')
+          : h('button', { class: 'btn slim ghost', type: 'button', onclick: () => { S.confirm = 'del-' + p.id; render(); } }, 'Löschen');
+        head = h('div', { class: 'card-head' }, h('h3', null, p.name),
+          h('div', { class: 'actions' }, h('button', { class: 'btn slim ghost', type: 'button', onclick: () => { S.renaming = p.id; S.confirm = null; render(); } }, 'Umbenennen'), del));
+      }
+      const kv = (k, v) => h('div', null, h('dt', null, k), h('dd', null, v));
+      out.push(h('div', { class: 'card' }, head,
+        h('dl', { class: 'kv' },
+          kv('Spiele', String(s.games)),
+          kv('Gewonnen', String(s.wins)),
+          kv('Gesamt-3-Dart-Ø', s.darts ? nf1.format(s.avg) : '–'),
+          kv('Bester Wurf', s.best ? String(s.best) : '–'),
+          kv('Höchstes Finish', s.co ? String(s.co) : '–'),
+          kv('Überworfen/Spiel', s.x01 ? (s.busts / s.x01).toLocaleString('de-DE', { maximumFractionDigits: 2 }) : '–')),
+        s.avgs.length >= 2 ? [sparkline(s.avgs.slice(-12)), h('p', { class: 'spark-cap' }, `3-Dart-Ø der letzten ${Math.min(12, s.avgs.length)} X01-Spiele`)] : null));
+    }
+    out.push(dataCard());
+    return out;
+  }
+
+  const dfmt = (ts) => new Date(ts).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  function resultText(g, P) {
+    if (g.type === 'x01') { const s = D.x01Stats(g, P); return `Ø ${nf1.format(s.avg)} · ${s.darts} Pfeile`; }
+    if (g.type === 'cricket') return `${P.points} Punkte · ${P.darts} Pfeile`;
+    if (g.type === 'atc') return `${P.idx}/${D.atcSeq(g).length} · ${P.darts} Pfeile`;
+    return `${P.points} Punkte`;
+  }
+  function visitLine(g, v, i) {
+    let val;
+    if (g.type === 'x01') val = v.bust ? h('span', { class: 'bust' }, 'überworfen') : `${v.score} → ${v.startRest - v.score}`;
+    else if (g.type === 'cricket') val = `${v.marks} Marks${v.score ? ` · ${v.score} P.` : ''}`;
+    else if (g.type === 'atc') val = `${v.hits} Treffer`;
+    else val = `${v.score} auf die ${v.target}`;
+    return h('li', null, h('span', { class: 'n' }, `${i + 1}.`), h('span', null, v.darts.map(D.label).join(' · ')), h('span', null, val));
+  }
+  function buildHistory() {
+    const out = [h('h2', { class: 'h' }, 'Verlauf')];
+    if (!S.games.length) { out.push(h('p', { class: 'muted' }, S.loaded ? 'Noch keine fertigen Spiele.' : 'Verlauf wird geladen …')); return out; }
+    for (const { docId, data: g } of S.games) {
+      const st = rep(g);
+      const open = S.open.has(docId);
+      const del = S.confirm === 'g-' + docId
+        ? h('button', { class: 'btn slim danger', type: 'button', onclick: () => { S.games = S.games.filter((x) => x.docId !== docId); persistDoc(docId, null); S.confirm = null; render(); } }, 'Wirklich löschen')
+        : h('button', { class: 'btn slim ghost', type: 'button', onclick: () => { S.confirm = 'g-' + docId; render(); } }, 'Löschen');
+      out.push(h('div', { class: 'card' },
+        h('div', { class: 'card-head' }, h('div', null, h('div', { class: 'mode' }, D.modeLabel(g)), h('div', { class: 'date' }, dfmt(g.finishedAt || g.createdAt))), del),
+        st.players.map((P, i) => h('div', { class: 'hres' }, h('span', { class: 'hname' }, nameOf(P.id, P.name)),
+          i === st.winner && !st.tie ? h('span', { class: 'pill win' }, g.players.length > 1 ? 'Sieger' : g.type === 'x01' ? 'Gecheckt' : 'Geschafft') : null,
+          h('span', { class: 'hval' }, resultText(g, P)))),
+        h('button', {
+          class: 'btn slim ghost', type: 'button', 'aria-expanded': String(open),
+          onclick: () => { if (open) S.open.delete(docId); else S.open.add(docId); render(); },
+        }, open ? 'Aufnahmen ausblenden' : 'Aufnahmen anzeigen'),
+        open ? st.players.map((P) => h('div', { class: 'field' }, st.players.length > 1 ? h('span', { class: 'lab' }, nameOf(P.id, P.name)) : null,
+          h('ol', { class: 'vlist' }, P.visits.map((v, i) => visitLine(g, v, i))))) : null));
+    }
+    return out;
+  }
+
+  window.addEventListener('error', (e) => { note('Fehler in der App: ' + (e && e.message ? e.message : 'unbekannt') + '. Schick mir diese Meldung, dann behebe ich es.'); });
+
+  /* ---------- events ---------- */
+  $('#pad').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.mod) { const m = +b.dataset.mod; S.mod = S.mod === m ? 1 : m; syncPad(); return; }
+    if (b.dataset.num) { const n = b.dataset.num; const m = S.mod; S.mod = 1; addDarts([(m === 3 ? 'T' : m === 2 ? 'D' : '') + n]); syncPad(); return; }
+    if (b.dataset.dart) { let c = b.dataset.dart; if (c === '25' && S.mod === 2) c = '50'; S.mod = 1; addDarts([c]); syncPad(); return; }
+    if (b.dataset.act === 'undo') { S.mod = 1; undo(); return; }
+    if (b.dataset.act === 'end') { S.mod = 1; endVisitEarly(); }
+  });
+  if ($('#callbar')) $('#callbar').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = $('#call');
+    const t = inp.value;
+    inp.value = '';
+    submitCall(t);
+  });
+  $('#reply-close').addEventListener('click', () => setReply(null));
+  $('#speaker').addEventListener('click', () => {
+    S.muted = !S.muted;
+    try { localStorage.setItem('dart-muted', S.muted ? '1' : '0'); } catch (e) { /* ignore */ }
+    if (S.muted) { try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+    else speak('Ton ist an.');
+    render();
+  });
+  function route() {
+    const v = (location.hash || '#spiel').slice(1);
+    S.view = ['spiel', 'spieler', 'verlauf'].includes(v) ? v : 'spiel';
+    S.confirm = null; S.renaming = null; S.navOpen = false;
+    render();
+  }
+  window.addEventListener('hashchange', route);
+
+  /* ---------- boot ---------- */
+  function localCol() {
+    const KEY = 'dart-zaehler-daten';
+    let data = {};
+    try { data = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { data = {}; }
+    const subs = [];
+    const emit = () => {
+      const docs = Object.entries(data).map(([id, x]) => ({ id, data: () => x }));
+      subs.forEach((f) => f({ docs, metadata: { fromCache: false, hasPendingWrites: false } }));
+    };
+    const save = () => {
+      try { localStorage.setItem(KEY, JSON.stringify(data)); }
+      catch (e) { note('Speichern auf diesem Gerät hat nicht geklappt. Ist der Speicher voll?'); }
+    };
+    return {
+      doc: (id) => ({
+        set: async (d) => { data[id] = JSON.parse(JSON.stringify(d)); save(); setTimeout(emit, 0); },
+        delete: async () => { delete data[id]; save(); setTimeout(emit, 0); },
+      }),
+      onSnapshot: (f) => { subs.push(f); setTimeout(emit, 0); return () => {}; },
+    };
+  }
+  async function boot() {
+    if (!window.claude) {
+      S.col = localCol();
+      subscribe();
+      return;
+    }
+    use('sample').then((s) => { S.sample = s || null; });
+    const user = await use('user');
+    const db = await use('db');
+    let uid = null;
+    try { uid = user && user.id ? await user.id() : null; } catch (e) { uid = null; }
+    if (db && uid) {
+      S.db = db; S.uid = uid;
+      S.col = db.collection('data/users/' + uid);
+      subscribe();
+    } else {
+      S.mem = true; S.loaded = true;
+      note('Speichern ist hier gerade nicht möglich. Spieler und Spiele gehen verloren, wenn du die Seite schließt.');
+      render();
+    }
+  }
+  const start = (data) => {
+    if (data && data.setup && typeof data.setup === 'object') Object.assign(S.setup, data.setup);
+    route();
+    boot();
+  };
+  try { window.claude?.hot?.snapshot?.(() => ({ setup: S.setup })); } catch (e) { /* ignore */ }
+  if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});
+})();
+
+</script>
+</body>
+</html>
