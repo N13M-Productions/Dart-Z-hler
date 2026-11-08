@@ -1406,16 +1406,29 @@ const Dart = (() => {
     return svg;
   }
 
-  function exportText() {
+  const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+  const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+  async function exportText() {
     const docs = {};
     for (const p of S.players) docs['player-' + p.id] = { kind: 'player', id: p.id, name: p.name, createdAt: p.createdAt || 0 };
     for (const { docId, data } of S.games) docs[docId] = data;
-    return 'DART1:' + btoa(unescape(encodeURIComponent(JSON.stringify(docs))));
+    const bytes = new TextEncoder().encode(JSON.stringify(docs));
+    if (typeof CompressionStream === 'function') {
+      try { return 'DART2:' + b64(await pipe(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* fall back */ }
+    }
+    return 'DART1:' + b64(bytes);
   }
-  function importText(txt) {
-    const raw = String(txt || '').trim().replace(/^DART1:/, '');
+  async function importText(txt) {
+    const clean = String(txt || '').replace(/\s+/g, '');
+    const m = /DART([12]):([A-Za-z0-9+/=]+)/.exec(clean);
     let docs;
-    try { docs = JSON.parse(decodeURIComponent(escape(atob(raw)))); } catch (e) { return 'Der Code ist unvollständig oder falsch kopiert. Kopier ihn bitte nochmal komplett.'; }
+    try {
+      if (!m) throw new Error('kein Code');
+      let bytes = unb64(m[2]);
+      if (m[1] === '2') bytes = await pipe(bytes, new DecompressionStream('deflate-raw'));
+      docs = JSON.parse(new TextDecoder().decode(bytes));
+    } catch (e) { return 'Der Code ließ sich nicht lesen. Kopier ihn bitte nochmal und füg ihn komplett ein.'; }
     let np = 0, ng = 0;
     for (const [id, d] of Object.entries(docs || {})) {
       if (!d || typeof d !== 'object' || !/^(player|game)-[\w.-]+$/.test(id)) continue;
@@ -1438,18 +1451,27 @@ const Dart = (() => {
       h('button', {
         class: 'btn', type: 'button',
         onclick: async () => {
-          const t = exportText();
-          try { await navigator.clipboard.writeText(t); S.dataMsg = 'Code kopiert. Füg ihn auf dem anderen Gerät unten bei „Code einfügen“ ein.'; S.showCode = null; }
-          catch (e) { S.dataMsg = 'Kopieren ging nicht automatisch. Markier den Code unten und kopier ihn selbst.'; S.showCode = t; }
+          const pending = exportText();
+          let copied = false;
+          try {
+            if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+              await navigator.clipboard.write([new ClipboardItem({ 'text/plain': pending.then((x) => new Blob([x], { type: 'text/plain' })) })]);
+            } else await navigator.clipboard.writeText(await pending);
+            copied = true;
+          } catch (e) { copied = false; }
+          const t = await pending;
+          S.showCode = t;
+          try { if (!copied) throw new Error('nicht kopiert'); S.dataMsg = `Code kopiert (${t.length} Zeichen). Füg ihn auf dem anderen Gerät bei „Code einfügen“ ein.`; }
+          catch (e) { S.dataMsg = 'Kopieren ging nicht automatisch. Tipp lange in das Feld, wähl „Alles auswählen“ und dann „Kopieren“.'; }
           render();
         },
       }, 'Alle Daten als Code kopieren'),
-      S.showCode ? h('textarea', { id: 'export-code', class: 'code', readonly: true, rows: '4' }, S.showCode) : null,
+      S.showCode ? h('textarea', { id: 'export-code', class: 'code', readonly: true, rows: '3', onfocus: (e) => e.target.select() }, S.showCode) : null,
       h('form', {
-        class: 'row', autocomplete: 'off',
-        onsubmit: (e) => { e.preventDefault(); const inp = e.target.querySelector('input'); S.dataMsg = importText(inp.value); inp.value = ''; render(); },
+        class: 'field', autocomplete: 'off',
+        onsubmit: async (e) => { e.preventDefault(); const ta = e.target.querySelector('textarea'); S.dataMsg = 'Wird übernommen …'; render(); S.dataMsg = await importText(ta.value); ta.value = ''; render(); },
       }, h('label', { class: 'sr', for: 'import-code' }, 'Code einfügen'),
-      h('input', { id: 'import-code', type: 'text', placeholder: 'Code einfügen' }),
+      h('textarea', { id: 'import-code', class: 'code', rows: '3', placeholder: 'Code einfügen', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }),
       h('button', { class: 'btn', type: 'submit' }, 'Übernehmen')),
       msg);
   }
